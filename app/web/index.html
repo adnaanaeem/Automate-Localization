@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Smart Localization Automation</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header class="topbar">
+  <h1>Smart Localization Automation</h1>
+  <nav class="steps">
+    <span class="step" data-step="setup">1. Setup</span>
+    <span class="step" data-step="review">2. Review</span>
+    <span class="step" data-step="progress">3. Run</span>
+    <span class="step" data-step="results">4. Results</span>
+  </nav>
+</header>
+
+<main>
+
+  <!-- SETUP SCREEN -->
+  <section id="screen-setup" class="screen active">
+    <div class="card">
+      <h2>Project</h2>
+      <label>English strings.xml path</label>
+      <div class="row">
+        <input id="path-input" type="text" placeholder=".../app/src/main/res/values/strings.xml" />
+        <button id="browse-btn" class="btn">Browse…</button>
+      </div>
+      <div id="recent-paths" class="recent-paths"></div>
+      <p id="path-error" class="error-text"></p>
+
+      <label>Target languages to add <span class="hint-inline">(optional)</span></label>
+      <p class="hint">Pre-checked: the languages the original script already handled. Check any others you also want a new values-&lt;code&gt;/ folder created for, next to values/, filled in on Translate. Leave all unchecked to only fill gaps in languages that already exist.</p>
+      <div id="lang-selected-list" class="lang-selected-list"></div>
+      <input id="lang-filter-input" type="text" placeholder="Filter languages…" />
+      <div id="lang-picker" class="lang-picker"></div>
+    </div>
+
+    <div class="card">
+      <h2>AI Provider</h2>
+      <div class="row">
+        <label class="radio"><input type="radio" name="provider" value="gemini" checked /> Gemini</label>
+        <label class="radio"><input type="radio" name="provider" value="openai" /> OpenAI</label>
+      </div>
+
+      <div id="provider-gemini" class="provider-block">
+        <label>Gemini API key <span id="gemini-key-status" class="key-status"></span></label>
+        <div class="row">
+          <input id="gemini-key-input" type="password" placeholder="Enter to set/replace, leave blank to keep existing" />
+          <button class="btn" data-save-key="gemini">Save</button>
+        </div>
+      </div>
+      <div id="provider-openai" class="provider-block hidden">
+        <label>OpenAI API key <span id="openai-key-status" class="key-status"></span></label>
+        <div class="row">
+          <input id="openai-key-input" type="password" placeholder="Enter to set/replace, leave blank to keep existing" />
+          <button class="btn" data-save-key="openai">Save</button>
+        </div>
+      </div>
+      <p class="hint">Keys are stored in your OS keychain, never in a file or in source control.</p>
+    </div>
+
+    <div class="card">
+      <h2>Google Sheet QA export <span class="hint-inline">(optional)</span></h2>
+      <label class="checkbox-row"><input type="checkbox" id="sheet-sync-toggle" /> Sync results to a Google Sheet after each run</label>
+      <div id="sheet-fields" class="hidden">
+        <label>Google Sheet ID</label>
+        <input id="sheet-id-input" type="text" placeholder="the ID segment from your Google Sheet's URL" />
+        <label>Service account JSON</label>
+        <div class="row">
+          <input id="service-account-input" type="text" placeholder="path/to/service_account.json" />
+          <button id="sa-browse-btn" class="btn">Browse…</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Batching <span class="hint-inline">(advanced)</span></h2>
+      <div class="row">
+        <div>
+          <label>Batch size</label>
+          <input id="batch-size-input" type="number" min="1" max="200" value="25" />
+        </div>
+        <div>
+          <label>Max retries per batch</label>
+          <input id="max-retries-input" type="number" min="0" max="10" value="2" />
+        </div>
+      </div>
+      <p class="hint">Keep batch size small enough that a model's response can't be truncated. 25 is the tested default.</p>
+    </div>
+
+    <div class="actions">
+      <button id="scan-btn" class="btn btn-primary">Scan</button>
+      <span id="scan-status" class="status-text"></span>
+    </div>
+  </section>
+
+  <!-- REVIEW SCREEN -->
+  <section id="screen-review" class="screen">
+    <div class="card summary-card">
+      <div id="review-summary"></div>
+    </div>
+
+    <div class="card">
+      <div class="review-toolbar">
+        <div>
+          <button id="select-all-btn" class="btn btn-small">Select all</button>
+          <button id="select-none-btn" class="btn btn-small">Select none</button>
+        </div>
+        <div id="selected-count" class="hint"></div>
+      </div>
+      <div class="table-wrap">
+        <table id="review-table">
+          <thead>
+            <tr>
+              <th class="col-check"></th>
+              <th>Key</th>
+              <th>English text</th>
+              <th>Missing in</th>
+            </tr>
+          </thead>
+          <tbody id="review-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="back-to-setup-btn" class="btn">Back</button>
+      <button id="run-btn" class="btn btn-primary">Translate selected</button>
+    </div>
+  </section>
+
+  <!-- PROGRESS SCREEN -->
+  <section id="screen-progress" class="screen">
+    <div class="card">
+      <h2>Translating…</h2>
+      <div id="progress-langs"></div>
+    </div>
+    <div class="card">
+      <h2>Log</h2>
+      <div id="progress-log" class="log-box"></div>
+    </div>
+  </section>
+
+  <!-- RESULTS SCREEN -->
+  <section id="screen-results" class="screen">
+    <div class="card">
+      <h2>Run summary</h2>
+      <div id="results-summary"></div>
+    </div>
+    <div class="actions">
+      <button id="new-run-btn" class="btn btn-primary">Start another run</button>
+    </div>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

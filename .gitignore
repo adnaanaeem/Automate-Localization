@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Claude Code local tool state (machine-specific paths, not part of the app)
+.claude/
+
+# Local config (recent paths, sheet id, non-secret settings only -- but keep
+# it out of git regardless since it's machine-local state)
+config.json
+
+# Credentials -- never commit these
+service_account.json
+*.env
+.env
