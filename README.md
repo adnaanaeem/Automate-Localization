@@ -10,6 +10,8 @@ machine-translates only those (via Gemini or OpenAI) and writes them back
 into the right files — without ever touching a string that's already
 translated.
 
+> **Full disclosure:** I built this purely for my own convenience, entirely by vibe-coding with Claude. I did not personally write a single line of it — didn't shoot one arrow myself. Every bug fix, every feature, every questionable variable name: all Claude. I just kept saying "yes, do that" and occasionally "no, not like that."
+
 ## Why
 
 Keeping Android localizations in sync by hand doesn't scale: every time a new
