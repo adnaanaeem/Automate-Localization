@@ -1,7 +1,7 @@
 # Handoff: Android Localization Desktop App
 
-> **Status as of 2026-08-12: built and working, tested against real translation runs (Gemini) including Google Sheet sync.**
-> Sections 1-9 below are the *original* spec this was built from — still accurate as ground truth for the engine logic. If you're continuing this project, read sections 1-9 for context, then jump to **section 10 onward** for what's actually been built, bugs found beyond the original list, how the open questions in section 8 were resolved, and what's not done yet.
+> **Status as of 2026-08-12: built, working, public, and packaged.** Tested against real translation runs (Gemini) including Google Sheet sync. Pushed to a public GitHub repo (secret-audited first) and shipped as a downloadable Windows `.exe` release — no Python required to use it.
+> Sections 1-9 below are the *original* spec this was built from — still accurate as ground truth for the engine logic. If you're continuing this project, read sections 1-9 for context, then jump to **section 10 onward** for what's actually been built, bugs found beyond the original list, how the open questions in section 8 were resolved, and what's not done yet. **Section 16** covers the public repo and the `.exe` release specifically.
 
 ## 1. What this project is
 
@@ -168,5 +168,20 @@ The original spec (section 3) only covered *auto-detecting* `values-*` folders t
 
 - OpenAI provider path (`providers.get_openai_client`) is wired up but has **not been exercised end-to-end** in testing -- only Gemini has a real tested run behind it.
 - No automated tests exist for `engine.py`'s logic (scan/run/build_sheet_rows/escaping). All verification so far has been manual, running the actual app.
-- No packaging/distribution step (e.g. PyInstaller) -- currently run via `python app/main.py` from source with dependencies installed globally, not in a venv.
+- ~~No packaging/distribution step~~ -- done, see section 16. Packaging is Windows-only so far; no macOS/Linux build has been attempted.
 - No per-key manual retry from the Results screen (see section 12).
+- No code signing on the `.exe` -- Windows SmartScreen flags it as an unrecognized publisher (documented in the README, not a bug, but a real friction point for end users; a code-signing certificate would fix it and costs money/requires an identity-verified publisher account).
+
+## 16. Public repo and the .exe release
+
+The project is public: **https://github.com/adnaanaeem/Automate-Localization** (default branch `main`; a leftover empty `master` branch from repo creation still exists and can be deleted).
+
+**Before the first push**, the whole tree was audited for secrets (grepped for API-key patterns, private-key markers, service-account fields -- all clean) and for real-but-not-credential internal identifiers. Two were found and genericized before pushing, both leftover from the reference script: a real Google Sheet ID (`localize_claude.py`'s `GOOGLE_SHEET_ID` and the matching UI placeholder in `web/index.html`) and an internal Android module path (`BASE_RES_PATH = "common-ui-android/..."`). **If you ever hardcode a real value into `localize_claude.py` or a UI placeholder while testing, remember to genericize it again before the next push** -- these aren't secrets in the credential sense, but they're real identifiers from someone's actual project and shouldn't leak just because they were convenient to test with. `.claude/` (local Claude Code tool state, has machine-specific file paths) and `build/`/`dist/` (PyInstaller output) are git-ignored and were never pushed.
+
+**The `.exe` release** (`v1.0.0` tag, GitHub Release with the binary attached) is built via PyInstaller from `SmartLocalizationAutomation.spec` -- see section 13's sibling, the "Building the .exe yourself" section in `README.md`, for the exact command. Notable things learned building it:
+
+- `app/main.py` needed a frozen-vs-dev path split for `WEB_DIR` (`sys._MEIPASS` when `sys.frozen`, else the source directory as before) -- otherwise the bundled `web/` assets can't be found once packaged.
+- The naive `--collect-all` flags needed for `google.generativeai`/`grpc`/`gspread`/`oauth2client`/`keyring` also pull in matplotlib, pandas, pyarrow, and tkinter transitively, ballooning a first test build to 337MB for a --onedir build. Excluding those (`--exclude-module`) got a `--onefile --windowed` build down to ~69MB with no loss of function -- confirmed by an actual smoke-test run of the packaged exe (checked for a live WebView2-hosted process and the absence of any `Traceback`/`ModuleNotFoundError` in its output), not just a successful build.
+- `pyinstaller` is a build-only dependency, kept in `requirements-build.txt` (`-r requirements.txt` + `pyinstaller`), not in the main `requirements.txt` that end users installing from source need.
+- Uploading a ~70MB asset to a GitHub Release via the API can silently get cut off by a shell/tool-level timeout mid-transfer -- the first attempt returned an API "success" response with a plausible-looking size, but the asset was actually stuck in a non-downloadable state (`"state": "starter"`, 404 on the actual download URL) because the upload never finished. **Always verify a freshly uploaded release asset by actually fetching its `browser_download_url`** (expect a 200, not just a 302 redirect existing) rather than trusting the creation API's response alone. The fix was deleting the broken asset and re-uploading with the transfer unconstrained by any timeout.
+- The API key already appearing "set" in a freshly built `.exe` on the same dev machine is expected, not a leak: `keyring`-backed keys live in the OS credential store (Windows Credential Manager, service name `SmartLocalizationAutomation`), keyed by the OS user account, not by which binary asks for it. Verified empirically that the actual key bytes are not present anywhere in the built `.exe` file. Someone else downloading the release on a different machine/account starts with no key configured, as expected.
