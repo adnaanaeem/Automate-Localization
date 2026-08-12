@@ -12,13 +12,20 @@ import traceback
 
 import webview
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+if getattr(sys, "frozen", False):
+    # Running as a PyInstaller-built .exe -- bundled files (including web/)
+    # are extracted to sys._MEIPASS, and sibling modules are already on
+    # sys.path via the bundle itself.
+    APP_DIR = sys._MEIPASS
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, APP_DIR)
 
 import config
 from engine import LocalizationEngine, sync_to_google_sheet, get_all_language_options
 import providers
 
-WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+WEB_DIR = os.path.join(APP_DIR, "web")
 
 
 def _js_arg(value):

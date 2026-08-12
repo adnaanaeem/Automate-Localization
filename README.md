@@ -38,7 +38,13 @@ step while staying safe:
 - A Gemini API key ([aistudio.google.com](https://aistudio.google.com/)) and/or an OpenAI API key ([platform.openai.com](https://platform.openai.com/))
 - *(Optional, for Google Sheets sync)* a Google Cloud service account with the Sheets API enabled, and the target sheet shared with that service account's email as an Editor
 
-## Setup
+## Download (Windows)
+
+No Python required — grab the latest `.exe` from the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases), double-click it, and the app window opens directly.
+
+> Windows SmartScreen will likely flag it as "unrecognized publisher" the first time, since the build isn't code-signed. Click **More info → Run anyway**. This is expected for an unsigned open-source executable, not a sign of a problem — check the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases) itself, or build it yourself from source (below), if you'd rather verify first.
+
+## Run from source
 
 ```bash
 python -m pip install -r requirements.txt
@@ -85,7 +91,22 @@ app/
   web/          # frontend (plain HTML/CSS/JS, no framework)
 localize_claude.py  # original reference CLI script
 requirements.txt
+requirements-build.txt        # adds pyinstaller, for building the .exe yourself
+SmartLocalizationAutomation.spec  # PyInstaller build recipe
 ```
+
+## Building the .exe yourself
+
+The Releases page always has the latest prebuilt Windows executable, but if
+you'd rather build it yourself from source:
+
+```bash
+python -m pip install -r requirements-build.txt
+python -m PyInstaller SmartLocalizationAutomation.spec --noconfirm
+```
+
+The finished executable is written to `dist/SmartLocalizationAutomation.exe`
+— a single self-contained file, nothing else to copy alongside it.
 
 ## Security
 
