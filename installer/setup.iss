@@ -1,5 +1,7 @@
 ; Inno Setup script for Automate Localization.
-; Build with: python -m PyInstaller AutomateLocalization.spec --noconfirm  (produces dist\AutomateLocalization.exe)
+; Build with: python -m PyInstaller AutomateLocalization.spec --noconfirm  (produces the
+;             dist\AutomateLocalization\ folder -- onedir, not onefile, see the .spec's
+;             comment for why)
 ; then:       "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\setup.iss
 ; Output:     dist_installer\AutomateLocalizationSetup.exe
 ;
@@ -10,7 +12,7 @@
 ; reports.
 
 #define MyAppName "Automate Localization"
-#define MyAppVersion "1.1.1"
+#define MyAppVersion "1.1.2"
 #define MyAppPublisher "Adnan Naeem"
 #define MyAppExeName "AutomateLocalization.exe"
 #define MyAppURL "https://github.com/adnaanaeem/Automate-Localization"
@@ -50,7 +52,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\dist\AutomateLocalization.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\AutomateLocalization\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -59,3 +61,20 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+const
+  SHCNE_ASSOCCHANGED = $8000000;
+  SHCNF_IDLIST = $0;
+
+procedure SHChangeNotify(wEventId: Longint; uFlags: Longint; dwItem1: Longint; dwItem2: Longint);
+external 'SHChangeNotify@shell32.dll stdcall';
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  // Windows caches shortcut/exe icons aggressively -- updating the exe in
+  // place (same path) doesn't reliably make Explorer notice the icon
+  // changed on its own. Nudge the shell to refresh after install/update.
+  if CurStep = ssPostInstall then
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, 0, 0);
+end;

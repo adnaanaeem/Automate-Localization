@@ -33,24 +33,37 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+# --onedir, not --onefile: a onefile exe re-extracts itself to a fresh
+# %TEMP%\_MEI* folder on every launch, which is a well-documented source of
+# "Failed to load Python DLL" errors (antivirus interference, extraction
+# races) on end-user machines. onedir extracts once at build time instead --
+# no per-launch extraction step, so that whole failure class goes away. The
+# installer bundles the resulting folder (see installer/setup.iss).
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='AutomateLocalization',
     icon='app/icon.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='AutomateLocalization',
 )
