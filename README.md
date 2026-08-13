@@ -1,4 +1,4 @@
-# Smart Localization Automation
+# Automate Localization
 
 A desktop app for Android developers that keeps `strings.xml` translations in
 sync across every language in your project — automatically, using AI.
@@ -33,6 +33,7 @@ step while staying safe:
 - 🔑 **Two AI providers** — Gemini or OpenAI, switchable per run.
 - 🔐 **Keys never touch disk** — API keys are entered once in the app and stored in your OS keychain via [`keyring`](https://pypi.org/project/keyring/), never written to a file or committed anywhere.
 - 📋 **Optional Google Sheets QA export** — after a run, sync exactly the strings that were newly translated (backfilled with every language's current value for context) to a fresh tab in a Google Sheet for reviewers.
+- 🔄 **Checks GitHub for updates on launch** — a banner appears if a newer release is available, with a one-click download-and-install; also available anytime from the **☰ Menu → Check for updates**.
 
 ## Prerequisites
 
@@ -42,9 +43,12 @@ step while staying safe:
 
 ## Download (Windows)
 
-No Python required — grab the latest `.exe` from the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases), double-click it, and the app window opens directly.
+No Python required. Grab the latest release from the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases):
 
-> Windows SmartScreen will likely flag it as "unrecognized publisher" the first time, since the build isn't code-signed. Click **More info → Run anyway**. This is expected for an unsigned open-source executable, not a sign of a problem — check the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases) itself, or build it yourself from source (below), if you'd rather verify first.
+- **`AutomateLocalizationSetup.exe`** (recommended) — a proper installer. Adds a Start Menu entry, optional desktop shortcut, and an uninstaller listed in "Add or Remove Programs". This is also what **☰ Menu → Check for updates** downloads and runs for you when a new version is out.
+- **`AutomateLocalization.exe`** — portable, no installation. Just run it from wherever you put it; nothing gets registered with Windows.
+
+> Windows SmartScreen will likely flag either one as "unrecognized publisher" the first time, since the build isn't code-signed. Click **More info → Run anyway**. This is expected for an unsigned open-source executable, not a sign of a problem — check the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases) itself, or build it yourself from source (below), if you'd rather verify first.
 
 ## Run from source
 
@@ -64,6 +68,8 @@ python app/main.py
 3. **Review** — every missing string is shown with a checkbox (checked by default) and which languages it's missing in. Deselect anything you don't want translated this run.
 4. **Run** — translates only the selected strings, in batches, with live per-language progress and a log of any retries.
 5. **Results** — a summary of what was written per language, anything still missing after retries (safe to rerun — it'll be picked back up on the next scan), and Google Sheet sync status.
+
+The **☰ Menu** (top-right) has two things: **Check for updates** (also runs automatically on launch — a banner appears if a newer release exists) and **About** (the developer's GitHub profile, fetched live).
 
 ## How it works, briefly
 
@@ -90,25 +96,38 @@ app/
   engine.py     # scan/translate/write logic
   config.py     # local settings + OS-keychain API key storage
   providers.py  # Gemini/OpenAI client setup
+  updater.py    # checks GitHub Releases, downloads + launches the installer
+  version.py    # single source of truth for the app version
   web/          # frontend (plain HTML/CSS/JS, no framework)
+installer/
+  setup.iss     # Inno Setup script -- builds the Windows installer
 localize_claude.py  # original reference CLI script
 requirements.txt
 requirements-build.txt        # adds pyinstaller, for building the .exe yourself
-SmartLocalizationAutomation.spec  # PyInstaller build recipe
+AutomateLocalization.spec     # PyInstaller build recipe
 ```
 
-## Building the .exe yourself
+## Building it yourself
 
-The Releases page always has the latest prebuilt Windows executable, but if
-you'd rather build it yourself from source:
+The Releases page always has the latest prebuilt installer and portable
+executable, but if you'd rather build them yourself from source:
 
 ```bash
 python -m pip install -r requirements-build.txt
-python -m PyInstaller SmartLocalizationAutomation.spec --noconfirm
+python -m PyInstaller AutomateLocalization.spec --noconfirm
 ```
 
-The finished executable is written to `dist/SmartLocalizationAutomation.exe`
-— a single self-contained file, nothing else to copy alongside it.
+This writes the portable executable to `dist/AutomateLocalization.exe` — a
+single self-contained file, nothing else to copy alongside it.
+
+To also build the installer, you'll additionally need [Inno Setup](https://jrsoftware.org/isinfo.php)
+(free), then:
+
+```bash
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\setup.iss
+```
+
+which writes `dist_installer\AutomateLocalizationSetup.exe`.
 
 ## Security
 

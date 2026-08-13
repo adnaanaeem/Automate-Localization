@@ -2,19 +2,48 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Smart Localization Automation</title>
+<title>Automate Localization</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 <header class="topbar">
-  <h1>Smart Localization Automation</h1>
+  <h1>Automate Localization <span id="app-version" class="app-version"></span></h1>
   <nav class="steps">
     <span class="step" data-step="setup">1. Setup</span>
     <span class="step" data-step="review">2. Review</span>
     <span class="step" data-step="progress">3. Run</span>
     <span class="step" data-step="results">4. Results</span>
   </nav>
+  <div class="menu-wrap">
+    <button id="menu-btn" class="btn btn-small">☰ Menu</button>
+    <div id="menu-dropdown" class="menu-dropdown hidden">
+      <button id="menu-check-update" class="menu-item">Check for updates</button>
+      <button id="menu-about" class="menu-item">About</button>
+    </div>
+  </div>
 </header>
+
+<div id="update-banner" class="update-banner hidden">
+  <div id="update-banner-text"></div>
+  <div class="update-banner-actions">
+    <button id="update-install-btn" class="btn btn-primary btn-small">Download &amp; Install</button>
+    <button id="update-dismiss-btn" class="btn btn-small">Not now</button>
+  </div>
+</div>
+
+<div id="about-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <button id="about-close-btn" class="modal-close" aria-label="Close">&times;</button>
+    <div class="about-content">
+      <img id="about-avatar" class="about-avatar" alt="Developer avatar" />
+      <h2 id="about-name">Adnan Naeem</h2>
+      <div id="about-location" class="hint">📍 Lahore, Pakistan</div>
+      <div id="about-company" class="hint">🏢 Unation</div>
+      <a id="about-link" class="about-link" href="https://github.com/adnaanaeem" target="_blank" rel="noopener">github.com/adnaanaeem</a>
+      <div class="hint about-app-line">Automate Localization <span id="about-version"></span></div>
+    </div>
+  </div>
+</div>
 
 <main>
 

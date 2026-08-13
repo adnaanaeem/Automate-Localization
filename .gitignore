@@ -6,10 +6,12 @@ venv/
 # Claude Code local tool state (machine-specific paths, not part of the app)
 .claude/
 
-# PyInstaller build output (the built .exe is attached to GitHub Releases,
-# not committed -- SmartLocalizationAutomation.spec is the source of truth)
+# PyInstaller / Inno Setup build output (the built exe/installer are
+# attached to GitHub Releases, not committed -- AutomateLocalization.spec
+# and installer/setup.iss are the source of truth)
 build/
 dist/
+dist_installer/
 
 # Local config (recent paths, sheet id, non-secret settings only -- but keep
 # it out of git regardless since it's machine-local state)

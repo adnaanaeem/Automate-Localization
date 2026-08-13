@@ -24,6 +24,8 @@ else:
 import config
 from engine import LocalizationEngine, sync_to_google_sheet, get_all_language_options
 import providers
+import updater
+from version import APP_VERSION
 
 WEB_DIR = os.path.join(APP_DIR, "web")
 
@@ -76,6 +78,37 @@ class Api:
 
     def get_language_options(self):
         return get_all_language_options()
+
+    # --- updates -------------------------------------------------------------
+
+    def get_app_version(self):
+        return APP_VERSION
+
+    def check_for_update(self):
+        return updater.check_for_update(APP_VERSION)
+
+    def download_and_install_update(self, download_url):
+        threading.Thread(
+            target=self._download_and_install_update_thread,
+            args=(download_url,),
+            daemon=True,
+        ).start()
+        return {"ok": True}
+
+    def _download_and_install_update_thread(self, download_url):
+        def on_progress(downloaded, total):
+            self._emit("onUpdateDownloadProgress", downloaded, total)
+
+        try:
+            updater.download_and_launch_installer(download_url, on_progress=on_progress)
+        except Exception as e:
+            self._emit("onUpdateError", str(e))
+            return
+        self._emit("onUpdateInstalling")
+        # The installer's CloseApplications setting waits for this process
+        # to exit before it can replace the running exe -- exit now that
+        # it's launched, rather than leaving the window open indefinitely.
+        os._exit(0)
 
     # --- file pickers --------------------------------------------------------
 
@@ -224,7 +257,7 @@ class Api:
 def main():
     api = Api()
     window = webview.create_window(
-        "Smart Localization Automation",
+        "Automate Localization",
         url=os.path.join(WEB_DIR, "index.html"),
         js_api=api,
         width=1100,

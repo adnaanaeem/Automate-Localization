@@ -411,14 +411,143 @@ function wireResultsScreen() {
   });
 }
 
+// --- Updates ------------------------------------------------------
+
+let pendingUpdate = null;
+
+async function loadAppVersion() {
+  const v = await api().get_app_version();
+  document.getElementById("app-version").textContent = "v" + v;
+}
+
+async function checkForUpdate(manual) {
+  const menuItem = document.getElementById("menu-check-update");
+  if (manual) { menuItem.disabled = true; menuItem.textContent = "Checking…"; }
+
+  const info = await api().check_for_update();
+
+  if (manual) { menuItem.disabled = false; menuItem.textContent = "Check for updates"; }
+
+  if (info.available) {
+    pendingUpdate = info;
+    renderUpdateBanner(info);
+  } else if (manual) {
+    alert("You're on the latest version.");
+  }
+}
+
+function renderUpdateBanner(info) {
+  const banner = document.getElementById("update-banner");
+  document.getElementById("update-banner-text").textContent =
+    `Update available: ${info.version} — a newer version is ready to install.`;
+  banner.classList.remove("hidden");
+}
+
+function wireUpdateBanner() {
+  document.getElementById("update-dismiss-btn").addEventListener("click", () => {
+    document.getElementById("update-banner").classList.add("hidden");
+  });
+
+  document.getElementById("update-install-btn").addEventListener("click", async () => {
+    if (!pendingUpdate) return;
+    document.getElementById("update-banner-text").textContent = "Downloading update… 0%";
+    document.getElementById("update-install-btn").disabled = true;
+    document.getElementById("update-dismiss-btn").disabled = true;
+    await api().download_and_install_update(pendingUpdate.download_url);
+  });
+}
+
+window.onUpdateDownloadProgress = function (downloaded, total) {
+  const pct = total > 0 ? Math.round((downloaded / total) * 100) : 0;
+  document.getElementById("update-banner-text").textContent = `Downloading update… ${pct}%`;
+};
+
+window.onUpdateInstalling = function () {
+  document.getElementById("update-banner-text").textContent =
+    "Launching installer — this app will close now, finish the install in the setup window that opens.";
+};
+
+window.onUpdateError = function (msg) {
+  document.getElementById("update-banner-text").textContent = "Update failed: " + msg;
+  document.getElementById("update-install-btn").disabled = false;
+  document.getElementById("update-dismiss-btn").disabled = false;
+};
+
+// --- Menu / About ------------------------------------------------------
+
+const GITHUB_USERNAME = "adnaanaeem";
+let aboutLoaded = false;
+
+function wireMenu() {
+  const menuBtn = document.getElementById("menu-btn");
+  const dropdown = document.getElementById("menu-dropdown");
+
+  menuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dropdown.classList.toggle("hidden");
+  });
+  document.addEventListener("click", () => dropdown.classList.add("hidden"));
+  dropdown.addEventListener("click", (e) => e.stopPropagation());
+
+  document.getElementById("menu-check-update").addEventListener("click", () => {
+    dropdown.classList.add("hidden");
+    checkForUpdate(true);
+  });
+  document.getElementById("menu-about").addEventListener("click", () => {
+    dropdown.classList.add("hidden");
+    openAboutModal();
+  });
+}
+
+async function openAboutModal() {
+  const modal = document.getElementById("about-modal");
+  modal.classList.remove("hidden");
+  document.getElementById("about-avatar").src = `https://github.com/${GITHUB_USERNAME}.png`;
+
+  const v = await api().get_app_version();
+  document.getElementById("about-version").textContent = "v" + v;
+
+  if (aboutLoaded) return;
+  try {
+    const resp = await fetch(`https://api.github.com/users/${GITHUB_USERNAME}`);
+    if (!resp.ok) return;
+    const profile = await resp.json();
+    if (profile.name) document.getElementById("about-name").textContent = profile.name;
+    document.getElementById("about-location").textContent = profile.location ? `📍 ${profile.location}` : "";
+    document.getElementById("about-company").textContent = profile.company ? `🏢 ${profile.company}` : "";
+    if (profile.html_url) {
+      const link = document.getElementById("about-link");
+      link.href = profile.html_url;
+      link.textContent = profile.html_url.replace(/^https?:\/\//, "");
+    }
+    aboutLoaded = true;
+  } catch (e) {
+    // offline or GitHub unreachable -- the static fallback already in the HTML stays as-is.
+  }
+}
+
+function wireAboutModal() {
+  document.getElementById("about-close-btn").addEventListener("click", () => {
+    document.getElementById("about-modal").classList.add("hidden");
+  });
+  document.getElementById("about-modal").addEventListener("click", (e) => {
+    if (e.target.id === "about-modal") document.getElementById("about-modal").classList.add("hidden");
+  });
+}
+
 // --- Init ------------------------------------------------------
 
 function init() {
   wireSetupScreen();
   wireReviewScreen();
   wireResultsScreen();
+  wireUpdateBanner();
+  wireMenu();
+  wireAboutModal();
   loadSettings();
   loadLanguagePicker();
+  loadAppVersion();
+  checkForUpdate(false);
   showScreen("setup");
 }
 

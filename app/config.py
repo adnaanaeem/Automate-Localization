@@ -12,8 +12,14 @@ import sys
 
 import keyring
 
-APP_NAME = "SmartLocalizationAutomation"
+APP_NAME = "AutomateLocalization"
 KEYRING_SERVICE = APP_NAME
+
+# The app was originally named SmartLocalizationAutomation -- these let an
+# existing install transparently pick up its old config/API keys after the
+# rename instead of the user having to redo setup.
+_LEGACY_APP_NAME = "SmartLocalizationAutomation"
+_LEGACY_KEYRING_SERVICE = _LEGACY_APP_NAME
 
 DEFAULT_CONFIG = {
     "recent_paths": [],
@@ -26,14 +32,17 @@ DEFAULT_CONFIG = {
 }
 
 
-def get_config_dir():
+def _config_base_dir():
     if sys.platform == "win32":
-        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.environ.get("APPDATA") or os.path.expanduser("~")
     elif sys.platform == "darwin":
-        base = os.path.expanduser("~/Library/Application Support")
+        return os.path.expanduser("~/Library/Application Support")
     else:
-        base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    d = os.path.join(base, APP_NAME)
+        return os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+
+
+def get_config_dir():
+    d = os.path.join(_config_base_dir(), APP_NAME)
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -42,10 +51,18 @@ def get_config_path():
     return os.path.join(get_config_dir(), "config.json")
 
 
+def _legacy_config_path():
+    return os.path.join(_config_base_dir(), _LEGACY_APP_NAME, "config.json")
+
+
 def load_config():
     path = get_config_path()
     if not os.path.exists(path):
-        return dict(DEFAULT_CONFIG)
+        legacy_path = _legacy_config_path()
+        if os.path.exists(legacy_path):
+            path = legacy_path
+        else:
+            return dict(DEFAULT_CONFIG)
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -74,7 +91,14 @@ def add_recent_path(cfg, path):
 
 def get_api_key(provider):
     try:
-        return keyring.get_password(KEYRING_SERVICE, provider) or ""
+        key = keyring.get_password(KEYRING_SERVICE, provider)
+        if key:
+            return key
+        legacy_key = keyring.get_password(_LEGACY_KEYRING_SERVICE, provider)
+        if legacy_key:
+            keyring.set_password(KEYRING_SERVICE, provider, legacy_key)
+            return legacy_key
+        return ""
     except Exception:
         return ""
 
