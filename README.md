@@ -1,5 +1,8 @@
 # Automate Localization
 
+[![Download for Windows](https://img.shields.io/badge/Download-Windows%20Installer-4f8cff?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/adnaanaeem/Automate-Localization/releases/latest/download/AutomateLocalizationSetup.exe)
+[![Latest release](https://img.shields.io/github/v/release/adnaanaeem/Automate-Localization?style=for-the-badge&color=2450b8&label=latest)](https://github.com/adnaanaeem/Automate-Localization/releases/latest)
+
 A desktop app for Android developers that keeps `strings.xml` translations in
 sync across every language in your project — automatically, using AI.
 
@@ -43,7 +46,7 @@ step while staying safe:
 
 ## Download (Windows)
 
-No Python required. Grab **`AutomateLocalizationSetup.exe`** from the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases) and run it. It's a proper installer — Start Menu entry, optional desktop shortcut, and an uninstaller listed in "Add or Remove Programs". This is also what **☰ Menu → Check for updates** downloads and runs for you when a new version is out.
+No Python required. **[Download the latest installer](https://github.com/adnaanaeem/Automate-Localization/releases/latest/download/AutomateLocalizationSetup.exe)** (`AutomateLocalizationSetup.exe`) and run it — or grab it from the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases) if you'd rather see the changelog first. It's a proper installer — Start Menu entry, optional desktop shortcut, and an uninstaller listed in "Add or Remove Programs". This is also what **☰ Menu → Check for updates** downloads and runs for you when a new version is out.
 
 > Windows SmartScreen will likely flag it as "unrecognized publisher" the first time, since the build isn't code-signed. Click **More info → Run anyway**. This is expected for an unsigned open-source executable, not a sign of a problem — check the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases) itself, or build it yourself from source (below), if you'd rather verify first.
 >
