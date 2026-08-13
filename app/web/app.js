@@ -54,7 +54,7 @@ async function loadSettings() {
   updateSheetFieldsVisibility();
 
   document.getElementById("batch-size-input").value = s.batch_size || 25;
-  document.getElementById("max-retries-input").value = s.max_retries != null ? s.max_retries : 2;
+  document.getElementById("max-retries-input").value = s.max_retries != null ? s.max_retries : 10;
 }
 
 async function loadLanguagePicker() {

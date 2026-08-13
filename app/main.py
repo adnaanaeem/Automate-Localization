@@ -53,8 +53,8 @@ class Api:
             "recent_paths": cfg.get("recent_paths", []),
             "last_provider": cfg.get("last_provider", "gemini"),
             "batch_size": cfg.get("batch_size", 25),
-            "max_retries": cfg.get("max_retries", 2),
-            "sheet_sync_enabled": cfg.get("sheet_sync_enabled", False),
+            "max_retries": cfg.get("max_retries", 10),
+            "sheet_sync_enabled": cfg.get("sheet_sync_enabled", True),
             "google_sheet_id": cfg.get("google_sheet_id", ""),
             "service_account_path": cfg.get("service_account_path", ""),
             "has_gemini_key": config.has_api_key("gemini"),
@@ -209,7 +209,7 @@ class Api:
 
         cfg = config.load_config()
         batch_size = int(cfg.get("batch_size", 25) or 25)
-        max_retries = int(cfg.get("max_retries", 2) or 2)
+        max_retries = int(cfg.get("max_retries", 10) or 10)
 
         def on_progress(lang, done, total):
             self._emit("onTranslationProgress", lang, done, total)

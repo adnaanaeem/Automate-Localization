@@ -25,8 +25,8 @@ DEFAULT_CONFIG = {
     "recent_paths": [],
     "last_provider": "gemini",
     "batch_size": 25,
-    "max_retries": 2,
-    "sheet_sync_enabled": False,
+    "max_retries": 10,
+    "sheet_sync_enabled": True,
     "google_sheet_id": "",
     "service_account_path": "",
 }

@@ -92,8 +92,8 @@
 
     <div class="card">
       <h2>Google Sheet QA export <span class="hint-inline">(optional)</span></h2>
-      <label class="checkbox-row"><input type="checkbox" id="sheet-sync-toggle" /> Sync results to a Google Sheet after each run</label>
-      <div id="sheet-fields" class="hidden">
+      <label class="checkbox-row"><input type="checkbox" id="sheet-sync-toggle" checked /> Sync results to a Google Sheet after each run</label>
+      <div id="sheet-fields">
         <label>Google Sheet ID</label>
         <input id="sheet-id-input" type="text" placeholder="the ID segment from your Google Sheet's URL" />
         <label>Service account JSON</label>
@@ -113,7 +113,7 @@
         </div>
         <div>
           <label>Max retries per batch</label>
-          <input id="max-retries-input" type="number" min="0" max="10" value="2" />
+          <input id="max-retries-input" type="number" min="0" max="10" value="10" />
         </div>
       </div>
       <p class="hint">Keep batch size small enough that a model's response can't be truncated. 25 is the tested default.</p>
