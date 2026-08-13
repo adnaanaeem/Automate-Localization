@@ -28,6 +28,7 @@ import updater
 from version import APP_VERSION
 
 WEB_DIR = os.path.join(APP_DIR, "web")
+ICON_PATH = os.path.join(APP_DIR, "icon.ico")
 
 
 def _js_arg(value):
@@ -85,7 +86,12 @@ class Api:
         return APP_VERSION
 
     def check_for_update(self):
-        return updater.check_for_update(APP_VERSION)
+        threading.Thread(target=self._check_for_update_thread, daemon=True).start()
+        return {"ok": True}
+
+    def _check_for_update_thread(self):
+        info = updater.check_for_update(APP_VERSION)
+        self._emit("onUpdateCheckResult", info)
 
     def download_and_install_update(self, download_url):
         threading.Thread(
@@ -265,7 +271,7 @@ def main():
         min_size=(820, 600),
     )
     api.set_window(window)
-    webview.start()
+    webview.start(icon=ICON_PATH)
 
 
 if __name__ == "__main__":

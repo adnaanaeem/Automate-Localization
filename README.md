@@ -43,12 +43,11 @@ step while staying safe:
 
 ## Download (Windows)
 
-No Python required. Grab the latest release from the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases):
+No Python required. Grab **`AutomateLocalizationSetup.exe`** from the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases) and run it. It's a proper installer — Start Menu entry, optional desktop shortcut, and an uninstaller listed in "Add or Remove Programs". This is also what **☰ Menu → Check for updates** downloads and runs for you when a new version is out.
 
-- **`AutomateLocalizationSetup.exe`** (recommended) — a proper installer. Adds a Start Menu entry, optional desktop shortcut, and an uninstaller listed in "Add or Remove Programs". This is also what **☰ Menu → Check for updates** downloads and runs for you when a new version is out.
-- **`AutomateLocalization.exe`** — portable, no installation. Just run it from wherever you put it; nothing gets registered with Windows.
-
-> Windows SmartScreen will likely flag either one as "unrecognized publisher" the first time, since the build isn't code-signed. Click **More info → Run anyway**. This is expected for an unsigned open-source executable, not a sign of a problem — check the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases) itself, or build it yourself from source (below), if you'd rather verify first.
+> Windows SmartScreen will likely flag it as "unrecognized publisher" the first time, since the build isn't code-signed. Click **More info → Run anyway**. This is expected for an unsigned open-source executable, not a sign of a problem — check the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases) itself, or build it yourself from source (below), if you'd rather verify first.
+>
+> Prefer a portable exe with no installer? Build it yourself from source (below) — `dist/AutomateLocalization.exe` isn't published as a separate release download.
 
 ## Run from source
 
@@ -98,9 +97,12 @@ app/
   providers.py  # Gemini/OpenAI client setup
   updater.py    # checks GitHub Releases, downloads + launches the installer
   version.py    # single source of truth for the app version
+  icon.ico      # app icon (exe, window/taskbar, installer)
   web/          # frontend (plain HTML/CSS/JS, no framework)
 installer/
   setup.iss     # Inno Setup script -- builds the Windows installer
+scripts/
+  make_icon.py  # regenerates app/icon.ico
 localize_claude.py  # original reference CLI script
 requirements.txt
 requirements-build.txt        # adds pyinstaller, for building the .exe yourself

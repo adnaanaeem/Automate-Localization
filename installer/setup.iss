@@ -10,7 +10,7 @@
 ; reports.
 
 #define MyAppName "Automate Localization"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "Adnan Naeem"
 #define MyAppExeName "AutomateLocalization.exe"
 #define MyAppURL "https://github.com/adnaanaeem/Automate-Localization"
@@ -26,6 +26,7 @@ AppUpdatesURL={#MyAppURL}/releases
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
+SetupIconFile=..\app\icon.ico
 ; Per-user install by default (no UAC prompt); the wizard still offers an
 ; "install for all users" option if the user explicitly wants it.
 PrivilegesRequired=lowest

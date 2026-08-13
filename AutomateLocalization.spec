@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('app/web', 'web')]
+datas = [('app/web', 'web'), ('app/icon.ico', '.')]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('google.generativeai')
@@ -40,6 +40,7 @@ exe = EXE(
     a.datas,
     [],
     name='AutomateLocalization',
+    icon='app/icon.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

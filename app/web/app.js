@@ -414,6 +414,7 @@ function wireResultsScreen() {
 // --- Updates ------------------------------------------------------
 
 let pendingUpdate = null;
+let manualUpdateCheckInFlight = false;
 
 async function loadAppVersion() {
   const v = await api().get_app_version();
@@ -421,20 +422,34 @@ async function loadAppVersion() {
 }
 
 async function checkForUpdate(manual) {
+  // Fires the check and returns immediately -- the network call happens on
+  // a background thread in Python; the result comes back later via
+  // onUpdateCheckResult. Never await a result here, so a slow/unreachable
+  // GitHub can't freeze the UI at launch.
   const menuItem = document.getElementById("menu-check-update");
-  if (manual) { menuItem.disabled = true; menuItem.textContent = "Checking…"; }
+  if (manual) {
+    manualUpdateCheckInFlight = true;
+    menuItem.disabled = true;
+    menuItem.textContent = "Checking…";
+  }
+  api().check_for_update();
+}
 
-  const info = await api().check_for_update();
-
-  if (manual) { menuItem.disabled = false; menuItem.textContent = "Check for updates"; }
+window.onUpdateCheckResult = function (info) {
+  const menuItem = document.getElementById("menu-check-update");
+  if (manualUpdateCheckInFlight) {
+    menuItem.disabled = false;
+    menuItem.textContent = "Check for updates";
+  }
 
   if (info.available) {
     pendingUpdate = info;
     renderUpdateBanner(info);
-  } else if (manual) {
+  } else if (manualUpdateCheckInFlight) {
     alert("You're on the latest version.");
   }
-}
+  manualUpdateCheckInFlight = false;
+};
 
 function renderUpdateBanner(info) {
   const banner = document.getElementById("update-banner");
