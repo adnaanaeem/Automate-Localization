@@ -550,6 +550,28 @@ function wireAboutModal() {
   });
 }
 
+// --- Event polling ------------------------------------------------------
+//
+// Python never calls window.evaluate_js() from a background thread -- that
+// reliably hung the whole app (confirmed with a py-spy stack dump; see the
+// comment on Api._emit in main.py for the full story, including why
+// marshaling the call onto the GUI thread didn't fix it either). Instead,
+// background threads queue {fn, args} events server-side and this polls
+// for them on a plain interval, dispatching each to the same
+// window.onXxx(...) handlers used throughout this file. The polling
+// interval is cheap (an empty-queue round trip) so it just runs
+// continuously rather than being started/stopped per operation.
+
+function startEventPolling() {
+  setInterval(async () => {
+    const events = await api().poll_events();
+    events.forEach(e => {
+      const fn = window[e.fn];
+      if (typeof fn === "function") fn(...e.args);
+    });
+  }, 250);
+}
+
 // --- Init ------------------------------------------------------
 
 function init() {
@@ -562,6 +584,7 @@ function init() {
   loadSettings();
   loadLanguagePicker();
   loadAppVersion();
+  startEventPolling();
   checkForUpdate(false);
   showScreen("setup");
 }

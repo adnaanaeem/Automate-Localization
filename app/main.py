@@ -4,7 +4,6 @@ frontend in web/index.html; the Python side is the engine from engine.py
 called directly, no HTTP server involved.
 """
 
-import json
 import os
 import sys
 import threading
@@ -31,19 +30,28 @@ WEB_DIR = os.path.join(APP_DIR, "web")
 ICON_PATH = os.path.join(APP_DIR, "icon.ico")
 
 
-def _js_arg(value):
-    """json.dumps a Python value for safe embedding as a single JS call argument."""
-    return json.dumps(value)
-
-
 class Api:
     def __init__(self):
-        self.window = None
-        self.engine = None
-        self.base_res_path = None
+        # Underscore-prefixed on purpose: pywebview's inject_pywebview()
+        # walks every non-underscore, non-callable attribute on this object
+        # recursively to build the JS bridge (webview/util.py's
+        # get_functions()). self._window is the live Window object with a
+        # huge WinForms/WebView2 COM object graph behind it -- if it were a
+        # public attribute, that recursive walk would descend into it and
+        # touch pythonnet/COM objects from whatever thread inject_pywebview
+        # runs on (WebView2's own navigation-completed event, not
+        # necessarily the GUI thread), which reproduced as the whole app
+        # going "Not Responding" if the user maximized while that walk was
+        # still in flight shortly after launch. Confirmed via py-spy stack
+        # dump of a hung process -- do not make these public again.
+        self._window = None
+        self._engine = None
+        self._base_res_path = None
+        self._event_queue = []
+        self._event_lock = threading.Lock()
 
     def set_window(self, window):
-        self.window = window
+        self._window = window
 
     # --- settings / config -------------------------------------------------
 
@@ -119,7 +127,7 @@ class Api:
     # --- file pickers --------------------------------------------------------
 
     def choose_strings_file(self):
-        result = self.window.create_file_dialog(
+        result = self._window.create_file_dialog(
             webview.FileDialog.OPEN,
             file_types=("XML files (*.xml)", "All files (*.*)"),
         )
@@ -134,7 +142,7 @@ class Api:
         return {"ok": True, "path": path}
 
     def choose_service_account_file(self):
-        result = self.window.create_file_dialog(
+        result = self._window.create_file_dialog(
             webview.FileDialog.OPEN,
             file_types=("JSON files (*.json)", "All files (*.*)"),
         )
@@ -150,8 +158,8 @@ class Api:
             engine = LocalizationEngine(base_res_path)
             result = engine.scan(additional_lang_codes)
 
-            self.engine = engine
-            self.base_res_path = base_res_path
+            self._engine = engine
+            self._base_res_path = base_res_path
 
             cfg = config.load_config()
             config.add_recent_path(cfg, strings_xml_path)
@@ -186,7 +194,7 @@ class Api:
     # --- run -------------------------------------------------------------------
 
     def run_translation(self, selected_keys, provider, sync_sheet):
-        if not self.engine:
+        if not self._engine:
             return {"ok": False, "error": "Run scan() first."}
         threading.Thread(
             target=self._run_translation_thread,
@@ -196,8 +204,47 @@ class Api:
         return {"ok": True}
 
     def _emit(self, fn_name, *args):
-        js_args = ", ".join(_js_arg(a) for a in args)
-        self.window.evaluate_js(f"window.{fn_name}({js_args})")
+        """
+        Queues an event for JS to pick up on its next poll -- see
+        poll_events(). Deliberately does NOT call window.evaluate_js() from
+        here, which every caller of _emit() does from a background thread
+        (translation progress, update checks, ...).
+
+        Two things were tried and both hung the app ("Not Responding") --
+        confirmed each time with a py-spy stack dump of the actual hung
+        process, not just theorized:
+
+        1. Calling window.evaluate_js() directly from a background thread.
+           pywebview 6.2.1's WinForms/EdgeChromium backend does this with no
+           Control.Invoke marshaling at all (unlike its own maximize/
+           minimize/restore/clear_cookies, which do marshal) -- a raw
+           cross-thread touch of the WebView2 control.
+        2. Marshaling that same call onto the GUI thread via
+           Control.Invoke/BeginInvoke (matching pywebview's own pattern for
+           its thread-safe methods) -- this does NOT help, because
+           window.evaluate_js() is itself a blocking call that waits on a
+           semaphore released by a JS callback message. Once the delegate
+           is dispatched and actually running, the GUI/message-pump thread
+           is sitting inside it, unable to return to its own message loop
+           to ever receive the callback that would release that wait --
+           self-deadlock, independent of Invoke vs BeginInvoke.
+
+        JS calling INTO Python (the js_api bridge direction) has always
+        been safe here -- pywebview's whole binding model depends on that
+        direction working -- so the fix is to only ever go that direction:
+        background threads write into this queue, and app.js polls
+        poll_events() on a plain setInterval, dispatching each queued
+        {fn, args} to the same window.onXxx(...) handlers as before. No
+        evaluate_js call from a background thread, ever.
+        """
+        with self._event_lock:
+            self._event_queue.append({"fn": fn_name, "args": list(args)})
+
+    def poll_events(self):
+        with self._event_lock:
+            events = self._event_queue
+            self._event_queue = []
+        return events
 
     def _run_translation_thread(self, selected_keys, provider, sync_sheet):
         try:
@@ -218,7 +265,7 @@ class Api:
             self._emit("onTranslationLog", msg)
 
         try:
-            result = self.engine.run(
+            result = self._engine.run(
                 set(selected_keys), provider, client,
                 on_progress=on_progress, on_log=on_log,
                 batch_size=batch_size, max_retries=max_retries,
@@ -239,7 +286,7 @@ class Api:
                 sheet_error = "Sheet sync is on but Sheet ID or service account file isn't configured."
             else:
                 try:
-                    master_sheet, lang_display_list = self.engine.build_sheet_rows(result.written_keys)
+                    master_sheet, lang_display_list = self._engine.build_sheet_rows(result.written_keys)
                     sheet_tab_name = sync_to_google_sheet(
                         sheet_id, sa_path, provider, master_sheet, lang_display_list
                     )
