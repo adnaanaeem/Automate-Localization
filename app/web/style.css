@@ -149,10 +149,17 @@ input:focus { outline: none; border-color: var(--accent); }
 
 .recent-paths { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
 .recent-path-chip {
+  display: inline-flex; align-items: center; gap: 6px;
   font-size: 11px; color: var(--text-dim); background: #0d0f14;
-  border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 999px; padding: 3px 8px 3px 10px; cursor: pointer;
 }
 .recent-path-chip:hover { color: var(--text); border-color: var(--accent); }
+.recent-path-remove {
+  visibility: hidden; opacity: 0; color: var(--text-dim); font-weight: 700; line-height: 1;
+  padding: 0 2px; border-radius: 3px; transition: opacity 0.12s;
+}
+.recent-path-chip:hover .recent-path-remove { visibility: visible; opacity: 1; }
+.recent-path-remove:hover { color: var(--err); }
 
 .actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; }
 
@@ -215,7 +222,7 @@ tbody tr:last-child td { border-bottom: none; }
 .lang-chip .lang-code { color: var(--text-dim); font-size: 10px; }
 .lang-chip.hidden { display: none; }
 
-.lang-selected-list { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.lang-selected-list { margin-top: 8px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
 .selected-lang-chip {
   display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text);
   background: #17233a; border: 1px solid var(--accent); border-radius: 999px; padding: 3px 6px 3px 10px;

@@ -2,4 +2,4 @@
 git tag/GitHub Release when cutting a new release -- updater.py compares
 this against the latest GitHub release tag to decide if an update exists."""
 
-APP_VERSION = "1.1.5"
+APP_VERSION = "1.1.6"

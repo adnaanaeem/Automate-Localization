@@ -87,6 +87,11 @@ def add_recent_path(cfg, path):
     return cfg
 
 
+def remove_recent_path(cfg, path):
+    cfg["recent_paths"] = [p for p in cfg.get("recent_paths", []) if p != path]
+    return cfg
+
+
 # --- API keys (OS keychain, never in config.json / never in source) --------
 
 def get_api_key(provider):

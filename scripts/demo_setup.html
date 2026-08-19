@@ -165,10 +165,11 @@ window.pywebview = { api: {
     has_gemini_key: true, has_openai_key: false,
   }),
   get_language_options: async () => LANG_OPTIONS,
-  get_app_version: async () => "1.1.5",
+  get_app_version: async () => "1.1.6",
   check_for_update: async () => ({ ok: true }),
   poll_events: async () => [],
   save_settings: async () => ({ ok: true }),
+  remove_recent_path: async () => ({ ok: true }),
 }};
 init();
 document.getElementById("path-input").value = "E:\\AndroidApps\\ShopEase\\app\\src\\main\\res\\values\\strings.xml";

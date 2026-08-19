@@ -78,6 +78,12 @@ class Api:
         config.save_config(cfg)
         return {"ok": True}
 
+    def remove_recent_path(self, path):
+        cfg = config.load_config()
+        config.remove_recent_path(cfg, path)
+        config.save_config(cfg)
+        return {"ok": True}
+
     def set_api_key(self, provider, key):
         if not key:
             config.delete_api_key(provider)

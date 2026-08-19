@@ -29,18 +29,28 @@ function escapeHtml(s) {
 
 // --- Setup screen ------------------------------------------------------
 
+function renderRecentPaths(paths) {
+  const recentDiv = document.getElementById("recent-paths");
+  recentDiv.innerHTML = "";
+  (paths || []).forEach(p => {
+    const chip = document.createElement("span");
+    chip.className = "recent-path-chip";
+    chip.innerHTML = `<span class="recent-path-text"></span><span class="recent-path-remove" title="Remove">×</span>`;
+    chip.querySelector(".recent-path-text").textContent = p;
+    chip.addEventListener("click", () => { document.getElementById("path-input").value = p; });
+    chip.querySelector(".recent-path-remove").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await api().remove_recent_path(p);
+      renderRecentPaths((paths || []).filter(x => x !== p));
+    });
+    recentDiv.appendChild(chip);
+  });
+}
+
 async function loadSettings() {
   const s = await api().get_settings();
 
-  const recentDiv = document.getElementById("recent-paths");
-  recentDiv.innerHTML = "";
-  (s.recent_paths || []).forEach(p => {
-    const chip = document.createElement("span");
-    chip.className = "recent-path-chip";
-    chip.textContent = p;
-    chip.onclick = () => { document.getElementById("path-input").value = p; };
-    recentDiv.appendChild(chip);
-  });
+  renderRecentPaths(s.recent_paths);
 
   document.querySelector(`input[name="provider"][value="${s.last_provider}"]`).checked = true;
   updateProviderVisibility();
