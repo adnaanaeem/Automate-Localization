@@ -1,9 +1,17 @@
+<!--
+  Generates the Setup-screen README screenshot. Duplicates index.html's
+  markup (with fake window.pywebview.api stubs instead of the real Python
+  backend) so it can be rendered headlessly without a running app -- if
+  index.html's structure changes, this drifts out of sync silently, so
+  re-diff against it before regenerating screenshots. See README.md's
+  "Screenshots" note (docs/screenshots/) for the full regeneration command.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <title>Automate Localization</title>
-<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="../app/web/style.css" />
 </head>
 <body>
 <header class="topbar">
@@ -47,7 +55,6 @@
 
 <main>
 
-  <!-- SETUP SCREEN -->
   <section id="screen-setup" class="screen active">
     <div class="card">
       <h2>Project</h2>
@@ -125,68 +132,46 @@
     </div>
   </section>
 
-  <!-- REVIEW SCREEN -->
-  <section id="screen-review" class="screen">
-    <div class="card summary-card">
-      <div id="review-summary"></div>
-    </div>
-
-    <div class="card">
-      <input id="review-filter-input" type="text" placeholder="Filter by key or English text…" />
-      <div id="review-filter-count" class="hint"></div>
-      <div class="review-toolbar">
-        <div>
-          <button id="select-all-btn" class="btn btn-small">Select all</button>
-          <button id="select-none-btn" class="btn btn-small">Select none</button>
-        </div>
-        <div id="selected-count" class="hint"></div>
-      </div>
-      <div class="table-wrap">
-        <table id="review-table">
-          <thead>
-            <tr>
-              <th class="col-check"></th>
-              <th>Key</th>
-              <th>English text</th>
-              <th>Missing in</th>
-            </tr>
-          </thead>
-          <tbody id="review-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button id="back-to-setup-btn" class="btn">Back</button>
-      <button id="run-btn" class="btn btn-primary">Translate selected</button>
-    </div>
-  </section>
-
-  <!-- PROGRESS SCREEN -->
-  <section id="screen-progress" class="screen">
-    <div class="card">
-      <h2>Translating…</h2>
-      <div id="progress-langs"></div>
-    </div>
-    <div class="card">
-      <h2>Log</h2>
-      <div id="progress-log" class="log-box"></div>
-    </div>
-  </section>
-
-  <!-- RESULTS SCREEN -->
-  <section id="screen-results" class="screen">
-    <div class="card">
-      <h2>Run summary</h2>
-      <div id="results-summary"></div>
-    </div>
-    <div class="actions">
-      <button id="new-run-btn" class="btn btn-primary">Start another run</button>
-    </div>
-  </section>
+  <section id="screen-review" class="screen"><div class="card summary-card"><div id="review-summary"></div></div><div class="card"><input id="review-filter-input" type="text" /><div id="review-filter-count" class="hint"></div><div class="review-toolbar"><div><button id="select-all-btn" class="btn btn-small">Select all</button><button id="select-none-btn" class="btn btn-small">Select none</button></div><div id="selected-count" class="hint"></div></div><div class="table-wrap"><table id="review-table"><thead><tr><th class="col-check"></th><th>Key</th><th>English text</th><th>Missing in</th></tr></thead><tbody id="review-tbody"></tbody></table></div></div><div class="actions"><button id="back-to-setup-btn" class="btn">Back</button><button id="run-btn" class="btn btn-primary">Translate selected</button></div></section>
+  <section id="screen-progress" class="screen"><div class="card"><h2>Translating…</h2><div id="progress-langs"></div></div><div class="card"><h2>Log</h2><div id="progress-log" class="log-box"></div></div></section>
+  <section id="screen-results" class="screen"><div class="card"><h2>Run summary</h2><div id="results-summary"></div></div><div class="actions"><button id="new-run-btn" class="btn btn-primary">Start another run</button></div></section>
 
 </main>
 
-<script src="app.js"></script>
+<script src="../app/web/app.js"></script>
+<script>
+const LANG_OPTIONS = [
+  {code:"de",display_name:"German",flag:"🇩🇪",legacy_default:true},
+  {code:"es",display_name:"Spanish",flag:"🇪🇸",legacy_default:true},
+  {code:"fr",display_name:"French",flag:"🇫🇷",legacy_default:true},
+  {code:"ja",display_name:"Japanese",flag:"🇯🇵",legacy_default:true},
+  {code:"ko",display_name:"Korean",flag:"🇰🇷",legacy_default:true},
+  {code:"pt",display_name:"Portuguese (Brazil)",flag:"🇵🇹",legacy_default:true},
+  {code:"ru",display_name:"Russian",flag:"🇷🇺",legacy_default:true},
+  {code:"it",display_name:"Italian",flag:"🇮🇹",legacy_default:true},
+  {code:"in",display_name:"Indonesian",flag:"🇮🇩",legacy_default:true},
+  {code:"zh-rCN",display_name:"Chinese (Simplified)",flag:"🇨🇳",legacy_default:true},
+  {code:"ar",display_name:"Arabic",flag:"🇸🇦",legacy_default:false},
+  {code:"hi",display_name:"Hindi",flag:"🇮🇳",legacy_default:false},
+];
+window.pywebview = { api: {
+  get_settings: async () => ({
+    recent_paths: [
+      "E:\\AndroidApps\\ShopEase\\app\\src\\main\\res\\values\\strings.xml",
+      "E:\\AndroidApps\\FitTrack\\app\\src\\main\\res\\values\\strings.xml",
+    ],
+    last_provider: "gemini", batch_size: 25, max_retries: 10,
+    sheet_sync_enabled: true, google_sheet_id: "", service_account_path: "",
+    has_gemini_key: true, has_openai_key: false,
+  }),
+  get_language_options: async () => LANG_OPTIONS,
+  get_app_version: async () => "1.1.5",
+  check_for_update: async () => ({ ok: true }),
+  poll_events: async () => [],
+  save_settings: async () => ({ ok: true }),
+}};
+init();
+document.getElementById("path-input").value = "E:\\AndroidApps\\ShopEase\\app\\src\\main\\res\\values\\strings.xml";
+</script>
 </body>
 </html>

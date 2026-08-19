@@ -259,6 +259,8 @@ function renderReviewScreen() {
 
   scanResult.keys.forEach(k => {
     const tr = document.createElement("tr");
+    tr.dataset.key = k.key;
+    tr.dataset.text = k.text;
     const missingNames = k.missing_in.map(code => scanResult.languages[code] || code);
     tr.innerHTML = `
       <td class="col-check"><input type="checkbox" checked data-key="${escapeHtml(k.key)}" /></td>
@@ -277,7 +279,31 @@ function renderReviewScreen() {
     });
   });
 
+  document.getElementById("review-filter-input").value = "";
+  applyReviewFilter();
   updateSelectedCount();
+}
+
+function applyReviewFilter() {
+  const q = document.getElementById("review-filter-input").value.trim().toLowerCase();
+  const rows = document.querySelectorAll("#review-tbody tr[data-key]");
+  let visible = 0;
+  rows.forEach(tr => {
+    const matches = !q
+      || tr.dataset.key.toLowerCase().includes(q)
+      || tr.dataset.text.toLowerCase().includes(q);
+    tr.classList.toggle("hidden", !matches);
+    if (matches) visible++;
+  });
+
+  const countEl = document.getElementById("review-filter-count");
+  if (rows.length === 0) {
+    countEl.textContent = "";
+  } else if (q) {
+    countEl.textContent = `Showing ${visible} of ${rows.length}`;
+  } else {
+    countEl.textContent = "";
+  }
 }
 
 function updateSelectedCount() {
@@ -288,16 +314,19 @@ function updateSelectedCount() {
 
 function wireReviewScreen() {
   document.getElementById("select-all-btn").addEventListener("click", () => {
-    document.querySelectorAll('#review-tbody input[type="checkbox"]').forEach(cb => { cb.checked = true; selectedKeys.add(cb.dataset.key); });
+    document.querySelectorAll('#review-tbody tr[data-key]:not(.hidden) input[type="checkbox"]')
+      .forEach(cb => { cb.checked = true; selectedKeys.add(cb.dataset.key); });
     updateSelectedCount();
   });
   document.getElementById("select-none-btn").addEventListener("click", () => {
-    document.querySelectorAll('#review-tbody input[type="checkbox"]').forEach(cb => { cb.checked = false; });
-    selectedKeys.clear();
+    document.querySelectorAll('#review-tbody tr[data-key]:not(.hidden) input[type="checkbox"]')
+      .forEach(cb => { cb.checked = false; selectedKeys.delete(cb.dataset.key); });
     updateSelectedCount();
   });
   document.getElementById("back-to-setup-btn").addEventListener("click", () => showScreen("setup"));
   document.getElementById("run-btn").addEventListener("click", startRun);
+
+  document.getElementById("review-filter-input").addEventListener("input", applyReviewFilter);
 }
 
 // --- Progress screen ------------------------------------------------------

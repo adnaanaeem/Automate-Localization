@@ -171,6 +171,8 @@ tbody tr:last-child td { border-bottom: none; }
   background: #2a1f14; color: var(--warn); margin: 2px 3px 0 0; border: 1px solid #4a3620;
 }
 
+#review-filter-input { margin-bottom: 4px; }
+#review-filter-count { margin-bottom: 10px; min-height: 14px; }
 .review-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 
 .summary-card ul { margin: 6px 0; padding-left: 18px; font-size: 13px; }

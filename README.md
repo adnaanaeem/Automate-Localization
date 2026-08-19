@@ -15,6 +15,15 @@ translated.
 
 > **Full disclosure:** I built this purely for my own convenience, entirely by vibe-coding with Claude. I did not personally write a single line of it — didn't shoot one arrow myself. Every bug fix, every feature, every questionable variable name: all Claude. I just kept saying "yes, do that" and occasionally "no, not like that."
 
+![Setup screen — path, target languages, provider, and batching](docs/screenshots/setup.png)
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/review.png" alt="Review screen — filterable checklist of missing strings" /></td>
+<td width="50%"><img src="docs/screenshots/results.png" alt="Results screen — per-language write counts and Sheet sync status" /></td>
+</tr>
+</table>
+
 ## Why
 
 Keeping Android localizations in sync by hand doesn't scale: every time a new
@@ -31,7 +40,7 @@ step while staying safe:
 
 - 🔍 **Auto-detects languages** — scans your `res/` folder for `values-*` directories and tells language folders (`values-de`) apart from device-qualifier variants (`values-land`, `values-sw600dp`, ...), which just get a raw copy of the English text instead of translation.
 - ➕ **Add new languages** — pick from a searchable list of ~80 languages (with flags) to create a brand-new `values-<code>/` folder and populate it from scratch, even if it didn't exist before.
-- ✅ **Review before you translate** — every missing string is listed with a checkbox and which languages it's missing in, checked by default, deselectable per-row.
+- ✅ **Review before you translate** — every missing string is listed with a checkbox and which languages it's missing in, checked by default, deselectable per-row. A filter box narrows the list by key or English text, and "select all"/"select none" respect whatever's currently filtered.
 - 📊 **Live per-language progress** — see "German: 8/23 translated" update in real time as each language completes, not one opaque global bar.
 - 🔑 **Two AI providers** — Gemini or OpenAI, switchable per run.
 - 🔐 **Keys never touch disk** — API keys are entered once in the app and stored in your OS keychain via [`keyring`](https://pypi.org/project/keyring/), never written to a file or committed anywhere.
@@ -67,7 +76,7 @@ python app/main.py
    - Optionally, check any additional languages you want new `values-<code>/` folders created for.
    - Optionally, turn on Google Sheet sync and point at a service account JSON.
 2. **Scan** — the app diffs every `values-xx/` folder against English, independently per language, and lists variant/unrecognized folders separately so nothing is silently skipped.
-3. **Review** — every missing string is shown with a checkbox (checked by default) and which languages it's missing in. Deselect anything you don't want translated this run.
+3. **Review** — every missing string is shown with a checkbox (checked by default) and which languages it's missing in. Type in the filter box to narrow the list by key or English text — handy for a large app. Deselect anything you don't want translated this run.
 4. **Run** — translates only the selected strings, in batches, with live per-language progress and a log of any retries.
 5. **Results** — a summary of what was written per language, anything still missing after retries (safe to rerun — it'll be picked back up on the next scan), and Google Sheet sync status.
 
@@ -122,8 +131,10 @@ python -m pip install -r requirements-build.txt
 python -m PyInstaller AutomateLocalization.spec --noconfirm
 ```
 
-This writes the portable executable to `dist/AutomateLocalization.exe` — a
-single self-contained file, nothing else to copy alongside it.
+This writes `dist/AutomateLocalization/` — the executable plus an
+`_internal/` folder it needs sitting next to it (an intentional choice, not
+a stray folder to clean up — see `AutomateLocalization.spec`'s comment for
+why this isn't a single-file build).
 
 To also build the installer, you'll additionally need [Inno Setup](https://jrsoftware.org/isinfo.php)
 (free), then:
@@ -133,6 +144,20 @@ To also build the installer, you'll additionally need [Inno Setup](https://jrsof
 ```
 
 which writes `dist_installer\AutomateLocalizationSetup.exe`.
+
+**Screenshots** in this README (`docs/screenshots/`) are generated, not
+hand-captured — `scripts/demo_*.html` fake the `window.pywebview.api` layer
+with realistic sample data so the real `app/web/` UI can be rendered
+headlessly:
+
+```bash
+python -m http.server 8935 --directory .
+# then, per screenshot:
+"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless=new --disable-gpu --window-size=1100,1500 --screenshot="docs\screenshots\setup.png" "http://localhost:8935/scripts/demo_setup.html"
+```
+
+Re-run this (and re-crop as needed) after any visible UI change so the
+README doesn't go stale.
 
 ## Security
 

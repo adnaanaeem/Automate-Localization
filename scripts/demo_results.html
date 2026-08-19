@@ -1,0 +1,67 @@
+<!--
+  Generates the Results-screen README screenshot. See the comment in
+  demo_setup.html -- same caveat about drifting out of sync with
+  index.html applies here.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Automate Localization</title>
+<link rel="stylesheet" href="../app/web/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <h1>Automate Localization <span id="app-version" class="app-version">v1.1.5</span></h1>
+  <nav class="steps">
+    <span class="step done" data-step="setup">1. Setup</span>
+    <span class="step done" data-step="review">2. Review</span>
+    <span class="step done" data-step="progress">3. Run</span>
+    <span class="step active" data-step="results">4. Results</span>
+  </nav>
+  <div class="menu-wrap">
+    <button id="menu-btn" class="btn btn-small">☰ Menu</button>
+    <div id="menu-dropdown" class="menu-dropdown hidden">
+      <button id="menu-check-update" class="menu-item">Check for updates</button>
+      <button id="menu-about" class="menu-item">About</button>
+    </div>
+  </div>
+</header>
+
+<div id="update-banner" class="update-banner hidden">
+  <div id="update-banner-text"></div>
+  <div class="update-banner-actions">
+    <button id="update-install-btn" class="btn btn-primary btn-small">Download &amp; Install</button>
+    <button id="update-dismiss-btn" class="btn btn-small">Not now</button>
+  </div>
+</div>
+
+<main>
+  <section id="screen-setup" class="screen"></section>
+  <section id="screen-review" class="screen"></section>
+  <section id="screen-progress" class="screen"></section>
+
+  <section id="screen-results" class="screen active">
+    <div class="card">
+      <h2>Run summary</h2>
+      <div id="results-summary"></div>
+    </div>
+    <div class="actions">
+      <button id="new-run-btn" class="btn btn-primary">Start another run</button>
+    </div>
+  </section>
+</main>
+
+<script src="../app/web/app.js"></script>
+<script>
+renderResultsScreen({
+  written: { German: 6, French: 4, Japanese: 8 },
+  failures: {},
+  variant_written: { "values-land": 6 },
+  sheet_status: "synced",
+  sheet_error: null,
+  sheet_tab_name: "Gemini Localization - Aug 18, 2026 06_42 PM",
+});
+</script>
+</body>
+</html>
