@@ -85,7 +85,9 @@ No Python required. **[Download the latest installer](https://github.com/adnaana
 
 **[Download the latest .dmg](https://github.com/adnaanaeem/Automate-Localization/releases/latest/download/AutomateLocalization.dmg)** (`AutomateLocalization.dmg`) — or grab it from the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases) if you'd rather see the changelog first. Open it and drag the app into `Applications`.
 
-> The build isn't signed or notarized (no Apple Developer certificate), so Gatekeeper will refuse a plain double-click on first launch — same idea as Windows SmartScreen above. Right-click (or Control-click) the app in Finder, choose **Open**, then confirm in the dialog that appears; this is only needed the first time.
+> The build isn't signed or notarized (no Apple Developer certificate), so Gatekeeper will refuse a plain double-click on first launch — same idea as Windows SmartScreen above, just stricter. Only needed once:
+> - Right-click (Control-click) the app in Finder → **Open** → confirm **Open** in the dialog. If that doesn't offer an Open option (some macOS versions only show "Move to Trash"), go to **System Settings → Privacy & Security**, scroll down to the "AutomateLocalization was blocked" line, and click **Open Anyway**, then confirm once more.
+> - Or, in Terminal: `xattr -cr /Applications/AutomateLocalization.app` — strips the quarantine flag directly, works regardless of macOS version.
 
 This build is produced by CI on every tagged release rather than by hand
 on real Mac hardware — see the "Building it yourself" section below for
