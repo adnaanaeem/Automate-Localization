@@ -132,7 +132,21 @@ class Api:
         except Exception as e:
             self._emit("onUpdateError", str(e))
             return
-        self._emit("onUpdateInstalling")
+
+        if sys.platform == "darwin":
+            # No installer to hand off to here -- download_and_launch_installer
+            # just mounted the .dmg in Finder. Nothing needs this process to
+            # exit (there's no file-in-use conflict the way a Windows
+            # installer has), so leave the app running and tell the user
+            # what to do next instead of the window vanishing with no
+            # explanation.
+            self._emit("onUpdateInstalling",
+                        "Downloaded — a Finder window with the new version should have opened. "
+                        "Drag it into Applications to replace the current one, then relaunch.")
+            return
+
+        self._emit("onUpdateInstalling",
+                    "Launching installer — this app will close now, finish the install in the setup window that opens.")
         # The installer's CloseApplications setting waits for this process
         # to exit before it can replace the running exe -- exit now that
         # it's launched, rather than leaving the window open indefinitely.

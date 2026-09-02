@@ -603,9 +603,8 @@ window.onUpdateDownloadProgress = function (downloaded, total) {
   document.getElementById("update-banner-text").textContent = `Downloading update… ${pct}%`;
 };
 
-window.onUpdateInstalling = function () {
-  document.getElementById("update-banner-text").textContent =
-    "Launching installer — this app will close now, finish the install in the setup window that opens.";
+window.onUpdateInstalling = function (msg) {
+  document.getElementById("update-banner-text").textContent = msg;
 };
 
 window.onUpdateError = function (msg) {

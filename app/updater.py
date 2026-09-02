@@ -14,7 +14,12 @@ import urllib.request
 
 REPO = "adnaanaeem/Automate-Localization"
 API_LATEST_RELEASE = f"https://api.github.com/repos/{REPO}/releases/latest"
-INSTALLER_ASSET_NAME = "AutomateLocalizationSetup.exe"
+# Was hardcoded to the Windows installer only, which meant check_for_update()
+# silently never reported an update on macOS -- it found a newer tag, then
+# failed to find "AutomateLocalizationSetup.exe" among that release's assets
+# (only "AutomateLocalization.dmg" is there) and gave up quietly. Now picks
+# the asset name that actually exists for the platform this is running on.
+INSTALLER_ASSET_NAME = "AutomateLocalization.dmg" if sys.platform == "darwin" else "AutomateLocalizationSetup.exe"
 _HEADERS = {"Accept": "application/vnd.github+json", "User-Agent": "AutomateLocalization"}
 
 
@@ -61,11 +66,22 @@ def check_for_update(current_version, timeout=5):
 
 def download_and_launch_installer(download_url, on_progress=None):
     """
-    Downloads the installer to a temp file and launches it. Does NOT exit
-    this process -- the caller must do that once this returns, so the
-    installer (which waits for/closes the running app via its
-    CloseApplications setting) can replace files cleanly. Raises on
-    download failure.
+    Downloads the installer/disk-image to a temp file and opens it.
+
+    On Windows this behaves as a real silent handoff: the .exe installer is
+    launched detached (DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP) so it
+    survives this process exiting, and its CloseApplications setting waits
+    for that exit before it can replace the running exe's files -- the
+    caller must exit right after this returns.
+
+    On macOS there's no equivalent "close the app, replace it, relaunch"
+    flow for a .dmg -- `open`ing it just mounts it in Finder, the same as
+    double-clicking a freshly downloaded one, and the user drags the app
+    into Applications themselves. There's nothing here for the running app
+    to wait for or exit over, so **the caller should not exit the process**
+    on this platform, unlike Windows.
+
+    Raises on download failure.
     """
     installer_path = os.path.join(tempfile.gettempdir(), INSTALLER_ASSET_NAME)
 
@@ -83,18 +99,13 @@ def download_and_launch_installer(download_url, on_progress=None):
                 if on_progress:
                     on_progress(downloaded, total)
 
-    # Detach the installer so it survives this process exiting right after.
-    # subprocess.DETACHED_PROCESS/CREATE_NEW_PROCESS_GROUP only exist on
-    # Windows (AttributeError on Mac/Linux) -- there's no shipped installer
-    # asset for those platforms yet (INSTALLER_ASSET_NAME above is Windows-
-    # only, so check_for_update() never reports an update on them and this
-    # function is unreachable there today), but this is cheap to make
-    # correct now rather than leave as a landmine for whenever that changes.
     if sys.platform == "win32":
         subprocess.Popen(
             [installer_path],
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
         )
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", installer_path])
     else:
         subprocess.Popen([installer_path], start_new_session=True)
     return installer_path
