@@ -1,7 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
+import sys
+
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('app/web', 'web'), ('app/icon.ico', '.')]
+sys.path.insert(0, "app")
+from version import APP_VERSION  # noqa: E402
+
+IS_MACOS = sys.platform == "darwin"
+
+datas = [('app/web', 'web'), ('app/icon.ico', '.'), ('app/icon.icns', '.')]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('google.generativeai')
@@ -38,7 +45,10 @@ pyz = PYZ(a.pure)
 # "Failed to load Python DLL" errors (antivirus interference, extraction
 # races) on end-user machines. onedir extracts once at build time instead --
 # no per-launch extraction step, so that whole failure class goes away. The
-# installer bundles the resulting folder (see installer/setup.iss).
+# Windows installer bundles the resulting folder (see installer/setup.iss);
+# on macOS, COLLECT's output instead becomes BUNDLE's input below, producing
+# a normal double-clickable .app (itself just a folder under the hood, same
+# "extract once at build time" property applies).
 exe = EXE(
     pyz,
     a.scripts,
@@ -67,3 +77,26 @@ coll = COLLECT(
     upx_exclude=[],
     name='AutomateLocalization',
 )
+
+if IS_MACOS:
+    # macOS-only: wraps COLLECT's onedir output into a proper .app bundle
+    # (Info.plist, dock icon, double-click launch). Not signed or notarized
+    # -- no Apple Developer certificate available to this build -- so
+    # Gatekeeper will refuse a plain double-click on a fresh download the
+    # same way Windows SmartScreen flags the unsigned .exe; the CI workflow
+    # and README both call this out rather than claiming it "just works".
+    app = BUNDLE(
+        coll,
+        name='AutomateLocalization.app',
+        icon='app/icon.icns',
+        bundle_identifier='com.adnaanaeem.automatelocalization',
+        version=APP_VERSION,
+        info_plist={
+            'CFBundleName': 'Automate Localization',
+            'CFBundleDisplayName': 'Automate Localization',
+            'CFBundleShortVersionString': APP_VERSION,
+            'CFBundleVersion': APP_VERSION,
+            'NSHighResolutionCapable': True,
+            'NSHumanReadableCopyright': 'Adnan Naeem',
+        },
+    )

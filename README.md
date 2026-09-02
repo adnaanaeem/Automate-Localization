@@ -80,6 +80,16 @@ No Python required. **[Download the latest installer](https://github.com/adnaana
 >
 > Prefer a portable exe with no installer? Build it yourself from source (below) — `dist/AutomateLocalization.exe` isn't published as a separate release download.
 
+## Download (macOS)
+
+Grab `AutomateLocalization.dmg` from the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases), open it, and drag the app into `Applications`.
+
+> The build isn't signed or notarized (no Apple Developer certificate), so Gatekeeper will refuse a plain double-click on first launch — same idea as Windows SmartScreen above. Right-click (or Control-click) the app in Finder, choose **Open**, then confirm in the dialog that appears; this is only needed the first time.
+
+This build is produced by CI on every tagged release rather than by hand
+on real Mac hardware — see the "Building it yourself" section below for
+how, and open an issue if something's off.
+
 ## Run from source (Windows, macOS)
 
 ```bash
@@ -90,16 +100,6 @@ python app/main.py
 Needs Python 3.9+. Requirements are the same on both platforms — `keyring`
 automatically uses macOS Keychain instead of Windows Credential Manager for
 API-key storage, no extra setup needed.
-
-**macOS**: there's no packaged installer yet (only Windows has one right
-now — a macOS build is a possible future addition, not decided). Running
-from source is the only way to use this app on a Mac today. The app itself
-has no Windows-only code paths in its normal operation — the one place that
-did (how the self-updater detaches the installer process after download)
-is now guarded to use the correct approach per platform — but a packaged
-Mac build has never actually been produced or tested end-to-end, so treat
-this as "should work" rather than "verified," and open an issue if
-something doesn't.
 
 ## Usage — Settings
 
@@ -193,20 +193,29 @@ AutomateLocalization.spec     # PyInstaller build recipe
 
 ## Building it yourself
 
-The Releases page always has the latest prebuilt installer and portable
-executable, but if you'd rather build them yourself from source:
+The Releases page always has the latest prebuilt Windows installer and
+macOS `.dmg` — both are built and attached automatically by
+[`.github/workflows/release.yml`](.github/workflows/release.yml) whenever
+a `vX.Y.Z` tag is pushed (bump `app/version.py` and `installer/setup.iss`'s
+`MyAppVersion` together, commit, then `git tag vX.Y.Z && git push --tags`;
+CI refuses to build if the tag and `app/version.py` disagree). Trigger the
+same build manually from the **Actions** tab (`workflow_dispatch`, no tag
+needed) to test the pipeline without publishing anything. If you'd rather
+build locally instead:
 
 ```bash
 python -m pip install -r requirements-build.txt
 python -m PyInstaller AutomateLocalization.spec --noconfirm
 ```
 
-This writes `dist/AutomateLocalization/` — the executable plus an
-`_internal/` folder it needs sitting next to it (an intentional choice, not
-a stray folder to clean up — see `AutomateLocalization.spec`'s comment for
-why this isn't a single-file build).
+On Windows this writes `dist/AutomateLocalization/` — the executable plus
+an `_internal/` folder it needs sitting next to it (an intentional choice,
+not a stray folder to clean up — see `AutomateLocalization.spec`'s comment
+for why this isn't a single-file build). On macOS it writes a proper
+`dist/AutomateLocalization.app` bundle instead (same spec file, branches on
+`sys.platform` at build time).
 
-To also build the installer, you'll additionally need [Inno Setup](https://jrsoftware.org/isinfo.php)
+To also build the **Windows installer**, you'll additionally need [Inno Setup](https://jrsoftware.org/isinfo.php)
 (free), then:
 
 ```bash
@@ -214,6 +223,15 @@ To also build the installer, you'll additionally need [Inno Setup](https://jrsof
 ```
 
 which writes `dist_installer\AutomateLocalizationSetup.exe`.
+
+To build the **macOS `.dmg`** yourself, on a Mac:
+
+```bash
+mkdir -p dist_dmg
+cp -R "dist/AutomateLocalization.app" dist_dmg/
+ln -s /Applications dist_dmg/Applications
+hdiutil create -volname "Automate Localization" -srcfolder dist_dmg -ov -format UDZO dist_installer/AutomateLocalization.dmg
+```
 
 **Screenshots** in this README (`docs/screenshots/`) are generated, not
 hand-captured — `scripts/demo.html` is a copy of `app/web/index.html` with

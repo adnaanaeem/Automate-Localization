@@ -1,8 +1,9 @@
 """
 Generates the app icon: a globe (localization) with a circular sync arrow
 badge (automation), in the app's UI accent blue. Pure PIL drawing -- no SVG
-rasterizer dependency. Run once to produce app/icon.ico and a preview PNG;
-not part of the app's runtime.
+rasterizer dependency. Run once to produce app/icon.ico, app/icon.icns
+(macOS -- Pillow can write ICNS directly, no `iconutil`/macOS host needed),
+and a preview PNG; not part of the app's runtime.
 """
 
 import math
@@ -97,8 +98,16 @@ def main():
     sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
     master.save(ico_path, format="ICO", sizes=sizes)
 
+    # ICNS wants a square source at least 1024px for its largest (retina
+    # Dock/Finder) representation -- use the pre-downsample supersampled
+    # canvas (SIZE = 1024 here) rather than the 256px `master`, so the
+    # large sizes Pillow generates from it aren't upscaled and blurry.
+    icns_path = os.path.join(app_dir, "icon.icns")
+    bg.save(icns_path, format="ICNS")
+
     print("wrote", preview_path)
     print("wrote", ico_path)
+    print("wrote", icns_path)
 
 
 if __name__ == "__main__":

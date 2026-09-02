@@ -1,0 +1,117 @@
+name: Build and release
+
+# Tag push (v1.2.3) builds both installers and publishes them to the
+# matching GitHub Release. workflow_dispatch runs the exact same build
+# steps without publishing anything -- use it to test this pipeline (e.g.
+# after touching this file or AutomateLocalization.spec) without cutting a
+# real release.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  # Catches the easy-to-forget mistake of tagging a release before bumping
+  # app/version.py (and installer/setup.iss, checked indirectly since the
+  # Windows build would just produce a mis-labeled installer otherwise, not
+  # fail outright). Only meaningful for an actual tag push -- skipped (not
+  # failed) on a manual workflow_dispatch test run, which has no tag to
+  # check against.
+  check-version:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag matches app/version.py
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER=$(grep -oP '(?<=APP_VERSION = ")[^"]+' app/version.py)
+          if [ "$TAG" != "$VER" ]; then
+            echo "::error::Tag v$TAG doesn't match app/version.py's APP_VERSION ($VER). Bump version.py (and installer/setup.iss's MyAppVersion) and commit before tagging."
+            exit 1
+          fi
+          echo "OK: tag v$TAG matches APP_VERSION"
+
+  build-windows:
+    needs: [check-version]
+    if: always() && (needs.check-version.result == 'success' || needs.check-version.result == 'skipped')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: requirements-build.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-build.txt
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller AutomateLocalization.spec --noconfirm
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\setup.iss'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutomateLocalizationSetup.exe
+          path: dist_installer/AutomateLocalizationSetup.exe
+          if-no-files-found: error
+
+  build-macos:
+    needs: [check-version]
+    if: always() && (needs.check-version.result == 'success' || needs.check-version.result == 'skipped')
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: requirements-build.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-build.txt
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller AutomateLocalization.spec --noconfirm
+
+      - name: Build .dmg
+        run: |
+          mkdir -p dist_dmg
+          cp -R "dist/AutomateLocalization.app" dist_dmg/
+          ln -s /Applications dist_dmg/Applications
+          mkdir -p dist_installer
+          hdiutil create -volname "Automate Localization" -srcfolder dist_dmg -ov -format UDZO dist_installer/AutomateLocalization.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutomateLocalization.dmg
+          path: dist_installer/AutomateLocalization.dmg
+          if-no-files-found: error
+
+  release:
+    needs: [build-windows, build-macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/AutomateLocalizationSetup.exe
+            release-assets/AutomateLocalization.dmg
+          generate_release_notes: true

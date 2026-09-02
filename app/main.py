@@ -30,7 +30,11 @@ import updater
 from version import APP_VERSION
 
 WEB_DIR = os.path.join(APP_DIR, "web")
-ICON_PATH = os.path.join(APP_DIR, "icon.ico")
+# pywebview's `icon` param to webview.start() is documented as "supported
+# only on GTK/QT" (silently ignored on the Windows/macOS backends this app
+# actually ships for), but pass the platform-correct file anyway rather than
+# always the Windows .ico -- harmless now, correct if that ever changes.
+ICON_PATH = os.path.join(APP_DIR, "icon.icns" if sys.platform == "darwin" else "icon.ico")
 
 
 class Api:
