@@ -19,6 +19,7 @@ What's new here:
     before translating and live per-language progress while translating.
 """
 
+import json
 import os
 import re
 import time
@@ -680,6 +681,39 @@ class LocalizationEngine:
         return master_sheet, lang_display_list
 
 
+def _client_email(service_account_path):
+    """Best-effort read of just the client_email field, for a clearer
+    permission-error message below -- never raises, "" on any failure."""
+    try:
+        with open(service_account_path, "r", encoding="utf-8") as f:
+            return json.load(f).get("client_email", "")
+    except Exception:
+        return ""
+
+
+def _open_sheet(gs_client, sheet_id, service_account_path):
+    """
+    gspread's open_by_key() wraps a 403 from Google's API in a bare,
+    message-less `PermissionError` (its own client.py does `raise
+    PermissionError from ex`, discarding the actual "[403]: The caller
+    does not have permission" text) -- confirmed by reproducing it
+    directly against a real not-yet-shared sheet, not hypothetical. Without
+    this, the caller's generic `str(e) or "(no message...)"` fallback has
+    nothing to show, which is exactly the unhelpful message a user hit in
+    practice. Re-raise with the concrete fix (share with this email)
+    instead.
+    """
+    try:
+        return gs_client.open_by_key(sheet_id)
+    except PermissionError as e:
+        email = _client_email(service_account_path)
+        who = f" ({email})" if email else ""
+        raise PermissionError(
+            f"This service account{who} doesn't have access to this sheet. "
+            "Share the sheet with that address as an Editor, then try again."
+        ) from e
+
+
 def sync_to_google_sheet(sheet_id, service_account_path, provider_name, master_sheet, lang_display_list):
     """
     Exports master_sheet rows to a new tab in the given Google Sheet.
@@ -691,7 +725,7 @@ def sync_to_google_sheet(sheet_id, service_account_path, provider_name, master_s
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name(service_account_path, scope)
     gs_client = gspread.authorize(creds)
-    sheet = gs_client.open_by_key(sheet_id)
+    sheet = _open_sheet(gs_client, sheet_id, service_account_path)
 
     # Google Sheets tab names can't contain : [ ] * / \ ? -- use an
     # underscore in place of the colon in the time, e.g.
@@ -699,10 +733,18 @@ def sync_to_google_sheet(sheet_id, service_account_path, provider_name, master_s
     tab_name = f"{provider_name.capitalize()} Localization - {datetime.now().strftime('%b %d, %Y %I_%M %p')}"
     tab = sheet.add_worksheet(title=tab_name, rows=str(len(master_sheet) + 10), cols="20")
 
-    headers = ["Key", "English"] + lang_display_list
+    # No "Key" column, and languages alphabetized by display name (English
+    # first) -- matches the shape of sheets this gets round-tripped through
+    # externally (QA/translation tools that export "Text"/language columns
+    # with no key), rather than this app's own historically Key-first
+    # layout. Import already tolerates a key-less tab fine (auto-generates
+    # one from the English text -- see sheet_import.fetch_sheet_rows), so
+    # dropping Key here doesn't break re-importing these rows later.
+    sorted_langs = sorted(lang_display_list)
+    headers = ["English"] + sorted_langs
     tab.append_row(headers)
 
-    rows = [[k, d.get('English', '')] + [d.get(l, "") for l in lang_display_list] for k, d in master_sheet.items()]
+    rows = [[d.get('English', '')] + [d.get(l, "") for l in sorted_langs] for d in master_sheet.values()]
     if rows:
         tab.append_rows(rows)
 

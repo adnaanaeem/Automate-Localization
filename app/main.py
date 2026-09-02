@@ -380,12 +380,20 @@ class Api:
 
         target_langs = {c: n for c, n in ios_engine.IOS_LANG_DISPLAY_NAMES.items() if c in target_codes}
 
+        # Same Batch size / Max retries values Android's run already uses
+        # (Settings screen) -- not separate iOS-only settings, matching the
+        # single-source-of-truth approach the rest of Settings follows.
+        cfg = config.load_config()
+        batch_size = int(cfg.get("batch_size", 25) or 25)
+        max_retries = int(cfg.get("max_retries", 10) or 10)
+
         def on_retry(attempt, n_pending):
             self._emit("onIosAddLog", f"Retry {attempt}: {n_pending} language(s) still missing, retrying...")
 
         try:
             translations, still_missing = ios_engine.translate_string_with_retry(
-                provider, client, english_text, context, target_langs, on_retry=on_retry,
+                provider, client, english_text, context, target_langs,
+                max_retries=max_retries, batch_size=batch_size, on_retry=on_retry,
             )
         except Exception as e:
             self._emit("onIosAddError", str(e))
@@ -465,6 +473,40 @@ class Api:
             return data.get("client_email", "")
         except Exception:
             return ""
+
+    def parse_sheet_id(self, text):
+        """Lets the Settings screen's Sheet ID field accept a pasted full
+        share URL, not just a bare ID -- see sheet_import.parse_sheet_id."""
+        return sheet_import.parse_sheet_id(text)
+
+    def check_sheet_connection(self):
+        """
+        Resolves the configured Sheet ID to the sheet's actual title, so
+        every screen that touches Google Sheets (Settings, iOS upload,
+        Import) can show *which* sheet it's pointed at instead of just an
+        opaque ID -- the exact confusion that led to a user pasting the
+        wrong sheet's ID in the first place. Threaded (real network call)
+        and result delivered via the event queue, same pattern as every
+        other network call in this class.
+        """
+        threading.Thread(target=self._check_sheet_connection_thread, daemon=True).start()
+        return {"ok": True}
+
+    def _check_sheet_connection_thread(self):
+        cfg = config.load_config()
+        sheet_id = cfg.get("google_sheet_id", "")
+        sa_path = cfg.get("service_account_path", "")
+        if not sheet_id or not sa_path:
+            self._emit("onSheetConnectionChecked", {"ok": False, "configured": False})
+            return
+        try:
+            name = sheet_import.get_sheet_name(sheet_id, sa_path)
+            self._emit("onSheetConnectionChecked", {"ok": True, "configured": True, "name": name})
+        except Exception as e:
+            self._emit("onSheetConnectionChecked", {
+                "ok": False, "configured": True,
+                "error": str(e) or f"{type(e).__name__} (no message -- see log for details)",
+            })
 
     def sheet_list_tabs(self):
         threading.Thread(target=self._sheet_list_tabs_thread, daemon=True).start()

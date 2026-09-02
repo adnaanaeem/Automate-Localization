@@ -149,6 +149,7 @@ select:disabled { color: var(--text-dim); cursor: not-allowed; }
 .status-text { font-size: 13px; color: var(--text-dim); }
 .key-status { font-size: 11px; }
 .key-status.set { color: var(--ok); }
+.status-ok { color: var(--ok); }
 .key-status.unset { color: var(--warn); }
 
 .recent-paths { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }

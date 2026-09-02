@@ -12,7 +12,7 @@
 ; reports.
 
 #define MyAppName "Automate Localization"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.3.0"
 #define MyAppPublisher "Adnan Naeem"
 #define MyAppExeName "AutomateLocalization.exe"
 #define MyAppURL "https://github.com/adnaanaeem/Automate-Localization"

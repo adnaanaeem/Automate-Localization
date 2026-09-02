@@ -16,8 +16,39 @@ Android vs iOS (see _android_reverse_lang_map's docstring for the messiest
 case, Portuguese/Indonesian).
 """
 
+import json
+import re
+
 import engine
 import ios_engine
+
+# Matches the ID segment out of a full Google Sheets URL, e.g.
+# "https://docs.google.com/spreadsheets/d/1AbC.../edit?gid=0#gid=0" ->
+# "1AbC...". Sheet IDs are URL-safe base64-ish (letters, digits, - and _).
+_SHEET_URL_ID_RE = re.compile(r"/spreadsheets/d/([a-zA-Z0-9_-]+)")
+
+
+def parse_sheet_id(text):
+    """
+    Lets the Sheet ID field take a pasted share URL directly instead of
+    requiring the user to go dig the ID segment out of it by hand. If
+    `text` contains a recognizable "/spreadsheets/d/<id>" URL, returns just
+    the `<id>` part; otherwise returns `text` unchanged (stripped) so a
+    bare ID pasted directly -- the previous only supported input -- still
+    works exactly as before.
+    """
+    text = (text or "").strip()
+    m = _SHEET_URL_ID_RE.search(text)
+    return m.group(1) if m else text
+
+
+def get_sheet_name(sheet_id, service_account_path):
+    """The sheet's own title (what shows in its browser tab / the Sheets
+    UI), so the app can show the user which real sheet a Sheet ID resolves
+    to, rather than just an opaque ID string."""
+    client = _get_gspread_client(service_account_path)
+    sheet = _open_sheet(client, sheet_id, service_account_path)
+    return sheet.title
 
 
 def _get_gspread_client(service_account_path):
@@ -29,9 +60,41 @@ def _get_gspread_client(service_account_path):
     return gspread.authorize(creds)
 
 
+def _client_email(service_account_path):
+    """Best-effort read of just the client_email field, for a clearer
+    permission-error message below -- never raises, "" on any failure."""
+    try:
+        with open(service_account_path, "r", encoding="utf-8") as f:
+            return json.load(f).get("client_email", "")
+    except Exception:
+        return ""
+
+
+def _open_sheet(client, sheet_id, service_account_path):
+    """
+    client.open_by_key() wraps a 403 from Google's API in a bare, message-
+    less `PermissionError` (gspread's own client.py re-raises it as
+    `raise PermissionError from ex`, discarding the actual "[403]: The
+    caller does not have permission" text) -- confirmed by reproducing it
+    directly against a real not-yet-shared sheet, not a hypothetical.
+    Without this, main.py's `str(e) or "... (no message -- see log for
+    details)"` fallback has nothing to show, which is exactly the unhelpful
+    message a user hit in practice. Re-raise with the concrete fix instead.
+    """
+    try:
+        return client.open_by_key(sheet_id)
+    except PermissionError as e:
+        email = _client_email(service_account_path)
+        who = f" ({email})" if email else ""
+        raise PermissionError(
+            f"This service account{who} doesn't have access to this sheet. "
+            "Share the sheet with that address as an Editor, then try again."
+        ) from e
+
+
 def list_worksheets(sheet_id, service_account_path):
     client = _get_gspread_client(service_account_path)
-    sheet = client.open_by_key(sheet_id)
+    sheet = _open_sheet(client, sheet_id, service_account_path)
     return [ws.title for ws in sheet.worksheets()]
 
 
@@ -40,7 +103,7 @@ def fetch_sheet_rows(sheet_id, service_account_path, tab_name):
     Returns {'headers': [lang display names present], 'rows': [{'key',
     'english', 'values': {header: value}, 'key_was_generated'}]}.
 
-    Only an "English" column is actually required. A "Key" column is
+    Only an "English" (or "Text") column is actually required. A "Key" column is
     common (every tab this app's own Sheet sync produces has one) but not
     mandatory -- a sheet a translator built by hand, or exported from
     somewhere else, might just have English + language columns with no
@@ -56,21 +119,25 @@ def fetch_sheet_rows(sheet_id, service_account_path, tab_name):
 
     Rows with no usable English text are skipped entirely -- there's
     nothing to derive a key from or anything to write. Raises ValueError
-    only if there's no "English" column at all, since at that point
-    there's nothing in the tab this function can work with.
+    only if neither an "English" nor a "Text" column is present, since at
+    that point there's nothing in the tab this function can work with.
     """
     client = _get_gspread_client(service_account_path)
-    sheet = client.open_by_key(sheet_id)
+    sheet = _open_sheet(client, sheet_id, service_account_path)
     ws = sheet.worksheet(tab_name)
     all_values = ws.get_all_values()
     if not all_values:
         return {"headers": [], "rows": []}
 
     headers = all_values[0]
-    try:
-        eng_idx = headers.index("English")
-    except ValueError:
-        raise ValueError('This tab doesn\'t have an "English" column -- expected a tab this app generated via Sheet sync (or one shaped like it).')
+    # "English" is what this app's own Sheet sync always names it, but a
+    # sheet built or exported elsewhere sometimes calls the same column
+    # "Text" instead (seen in practice, not hypothetical) -- try both,
+    # preferring "English" if a tab somehow has both.
+    eng_col = "English" if "English" in headers else ("Text" if "Text" in headers else None)
+    if eng_col is None:
+        raise ValueError('This tab doesn\'t have an "English" (or "Text") column -- expected a tab this app generated via Sheet sync (or one shaped like it).')
+    eng_idx = headers.index(eng_col)
 
     key_idx = headers.index("Key") if "Key" in headers else None
     skip_idxs = {eng_idx} if key_idx is None else {eng_idx, key_idx}
@@ -177,10 +244,33 @@ def import_to_android(base_res_path, selected_rows):
 
 def import_to_ios(catalog_path, selected_rows):
     """
-    Same idea for a .xcstrings catalog. Returns {'written_keys': n,
-    'unrecognized_columns': [...]} or raises if the catalog can't be
-    loaded/saved -- callers should treat that as "do not touch this file",
-    same rule as everywhere else in this app.
+    Same idea for a .xcstrings catalog -- and same never-overwrite rule as
+    everywhere else in this app: ios_engine.add_string_to_catalog only
+    ever fills in languages a key doesn't already have, it never touches
+    an existing localization. This function's job is making sure that
+    actually shows up in what gets reported back, instead of just counting
+    rows processed regardless of whether anything changed (which is what
+    it used to do -- a row whose key/languages were already fully present
+    counted as "written" the same as a genuinely new one, indistinguishable
+    to the user).
+
+    Returns {'new_keys': n, 'updated_keys': n, 'already_complete': n,
+    'duplicate_keys': {key: [english_text, ...]}, 'unrecognized_columns':
+    [...]}:
+    - new_keys: the key didn't exist in the catalog at all before this import.
+    - updated_keys: the key existed, and at least one selected language
+      that wasn't already there got filled in.
+    - already_complete: the key existed and every selected language for it
+      was already present -- nothing changed for that row.
+    - duplicate_keys: keys that appeared on more than one *selected* row in
+      this same import (e.g. two rows whose English text happened to
+      slugify to the same auto-generated key) -- not an error, they still
+      merge safely via the same never-overwrite rule, but silently merging
+      two sheet rows into one catalog entry is worth surfacing rather than
+      hiding.
+
+    Raises if the catalog can't be loaded/saved -- callers must treat that
+    as "do not touch this file", same rule as everywhere else in this app.
     """
     reverse_map = _ios_reverse_lang_map()
 
@@ -188,9 +278,17 @@ def import_to_ios(catalog_path, selected_rows):
     if catalog is None:
         raise RuntimeError(f"{catalog_path} exists but could not be parsed as a valid .xcstrings file -- refusing to write to it.")
 
+    existing_keys = set(catalog.get("strings", {}).keys())
     unrecognized_columns = set()
-    written_keys = 0
+    new_keys = 0
+    updated_keys = 0
+    already_complete = 0
+    seen_this_batch = {}
+
     for row in selected_rows:
+        key = row["key"]
+        seen_this_batch.setdefault(key, []).append(row["english"])
+
         translations = {}
         for header, value in row["values"].items():
             code = reverse_map.get(header)
@@ -198,8 +296,25 @@ def import_to_ios(catalog_path, selected_rows):
                 unrecognized_columns.add(header)
                 continue
             translations[code] = value
-        ios_engine.add_string_to_catalog(catalog, row["key"], row["english"], translations)
-        written_keys += 1
+
+        merge_result = ios_engine.add_string_to_catalog(catalog, key, row["english"], translations)
+
+        if key not in existing_keys:
+            new_keys += 1
+            existing_keys.add(key)  # a later row in this same batch sharing this key is now "existing", not "new"
+        elif merge_result["added"]:
+            updated_keys += 1
+        else:
+            already_complete += 1
 
     ios_engine.save_catalog(catalog_path, catalog)
-    return {"written_keys": written_keys, "unrecognized_columns": sorted(unrecognized_columns)}
+
+    duplicate_keys = {k: texts for k, texts in seen_this_batch.items() if len(texts) > 1}
+
+    return {
+        "new_keys": new_keys,
+        "updated_keys": updated_keys,
+        "already_complete": already_complete,
+        "duplicate_keys": duplicate_keys,
+        "unrecognized_columns": sorted(unrecognized_columns),
+    }

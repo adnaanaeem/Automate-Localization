@@ -183,18 +183,19 @@
       <h2>Google Sheet QA export <span class="hint-inline">(optional)</span></h2>
       <label class="checkbox-row"><input type="checkbox" id="sheet-sync-toggle" checked /> Sync Android results to a Google Sheet after each run</label>
       <div id="sheet-fields">
-        <label>Google Sheet ID</label>
-        <input id="sheet-id-input" type="text" placeholder="the ID segment from your Google Sheet's URL" />
+        <label>Google Sheet ID <span class="hint-inline">(or just paste the sheet's share URL)</span></label>
+        <input id="sheet-id-input" type="text" placeholder="paste the sheet's URL, or just the ID segment" />
         <label>Service account JSON</label>
         <div class="row">
           <input id="service-account-input" type="text" placeholder="path/to/service_account.json" />
           <button id="sa-browse-btn" class="btn">Browse…</button>
         </div>
+        <p id="settings-sheet-status" class="hint"></p>
         <div class="hint">
           <div>How to get set up:</div>
           <ol>
             <li>Open (or create) the Google Sheet you want to sync results to / import from.</li>
-            <li>Copy the ID segment out of its URL: <code>docs.google.com/spreadsheets/d/<b>this-part</b>/edit</code>, and paste it into Google Sheet ID above.</li>
+            <li>Copy its share URL (or just the ID segment: <code>docs.google.com/spreadsheets/d/<b>this-part</b>/edit</code>) and paste it into Google Sheet ID above — a full URL is parsed down to the ID automatically.</li>
             <li>Share that sheet with this service account as an <b>Editor</b> — otherwise this app can't read or write to it: <span id="settings-sa-email" class="key-cell"></span></li>
           </ol>
         </div>
@@ -264,6 +265,7 @@
             <tbody id="ios-session-tbody"></tbody>
           </table>
         </div>
+        <p id="ios-sheet-name-hint" class="hint"></p>
         <div class="actions">
           <button id="ios-upload-sheet-btn" class="btn" disabled>Upload session to Sheet</button>
           <span id="ios-upload-status" class="status-text"></span>
@@ -277,7 +279,7 @@
     <div class="card">
       <h2>Import from Google Sheet</h2>
       <p class="hint">Pulls rows back from a tab in a Google Sheet, for review/select, then writes them into a local project file. Uses the Sheet ID and service account configured on the <a href="#" id="import-settings-link">Settings screen</a>.</p>
-      <p class="hint">Sheet: <span id="import-sheet-id-display" class="key-cell"></span> &nbsp;·&nbsp; Service account: <span id="import-sa-email" class="key-cell"></span></p>
+      <p class="hint">Sheet: <span id="import-sheet-name-display"></span> <span class="hint-inline">(ID: <span id="import-sheet-id-display" class="key-cell"></span>)</span> &nbsp;·&nbsp; Service account: <span id="import-sa-email" class="key-cell"></span></p>
       <div class="row">
         <select id="import-tab-select" disabled><option>Click "Load tabs" first…</option></select>
         <button id="import-load-tabs-btn" class="btn">Load tabs</button>

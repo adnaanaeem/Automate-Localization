@@ -69,6 +69,55 @@ async function loadSettings() {
   document.getElementById("import-sheet-id-display").textContent = s.google_sheet_id || "(not set)";
 }
 
+// --- Sheet connection status (shared across Settings/iOS/Import) ---------
+//
+// Resolves the configured Sheet ID to the sheet's real title, so every
+// screen that touches Google Sheets shows *which* sheet it's pointed at
+// instead of an opaque ID -- the exact confusion behind a user pasting a
+// wrong-but-valid-looking Sheet ID. One backend call, one shared piece of
+// state, rendered onto all three screens' status spots.
+
+let sheetConnectionStatus = null;
+
+async function checkSheetConnection() {
+  await api().check_sheet_connection();
+}
+
+window.onSheetConnectionChecked = function (payload) {
+  sheetConnectionStatus = payload;
+  renderSheetConnectionStatus();
+};
+
+function renderSheetConnectionStatus() {
+  const s = sheetConnectionStatus;
+
+  const settingsEl = document.getElementById("settings-sheet-status");
+  if (settingsEl) {
+    if (!s || !s.configured) {
+      settingsEl.textContent = "";
+      settingsEl.className = "hint";
+    } else if (s.ok) {
+      settingsEl.textContent = `✓ Connected to "${s.name}"`;
+      settingsEl.className = "hint status-ok";
+    } else {
+      settingsEl.textContent = `Couldn't connect: ${s.error}`;
+      settingsEl.className = "hint error-text";
+    }
+  }
+
+  const iosEl = document.getElementById("ios-sheet-name-hint");
+  if (iosEl) {
+    iosEl.textContent = s && s.ok ? `Uploads to "${s.name}"` : "";
+  }
+
+  const importNameEl = document.getElementById("import-sheet-name-display");
+  if (importNameEl) {
+    if (s && s.ok) importNameEl.textContent = s.name;
+    else if (s && s.configured) importNameEl.textContent = "(couldn't connect)";
+    else importNameEl.textContent = "(not configured)";
+  }
+}
+
 async function loadLanguagePicker() {
   newLangOptions = await api().get_language_options();
   selectedNewLangs = new Set(newLangOptions.filter(o => o.legacy_default).map(o => o.code));
@@ -189,7 +238,21 @@ function wireSettingsScreen() {
   document.getElementById("sheet-sync-toggle").addEventListener("change", () => {
     updateSheetFieldsVisibility(); persistSettings();
   });
-  ["sheet-id-input", "service-account-input", "batch-size-input", "max-retries-input"].forEach(id => {
+
+  document.getElementById("sheet-id-input").addEventListener("change", async (e) => {
+    // Accepts a pasted full share URL, not just the bare ID -- normalize
+    // the field to just the ID once parsed, so what's saved/displayed
+    // elsewhere is always the clean ID.
+    const parsed = await api().parse_sheet_id(e.target.value);
+    e.target.value = parsed;
+    persistSettings();
+    checkSheetConnection();
+  });
+  document.getElementById("service-account-input").addEventListener("change", () => {
+    persistSettings();
+    checkSheetConnection();
+  });
+  ["batch-size-input", "max-retries-input"].forEach(id => {
     document.getElementById(id).addEventListener("change", persistSettings);
   });
 
@@ -199,6 +262,7 @@ function wireSettingsScreen() {
       document.getElementById("service-account-input").value = res.path;
       persistSettings();
       refreshServiceAccountEmail();
+      checkSheetConnection();
     }
   });
 
@@ -1063,7 +1127,31 @@ window.onSheetImportDone = function (payload) {
       });
     }
   } else {
-    html += `<p><span class="count-ok">${payload.written_keys}</span> key(s) written to the catalog.</p>`;
+    // iOS: distinguishes genuinely new keys from existing keys that just
+    // got a new language filled in, from rows that changed nothing at all
+    // (key + every selected language for it already existed) -- never
+    // overwrites an existing localization, same rule as everywhere else,
+    // and this is what actually shows that rather than just counting rows.
+    if (payload.new_keys) {
+      html += `<div class="results-lang-row"><span>New keys added</span><span class="count-ok">+${payload.new_keys}</span></div>`;
+    }
+    if (payload.updated_keys) {
+      html += `<div class="results-lang-row"><span>Existing keys, new language(s) filled in</span><span class="count-ok">+${payload.updated_keys}</span></div>`;
+    }
+    if (payload.already_complete) {
+      html += `<div class="results-lang-row"><span>Already had everything selected</span><span>${payload.already_complete}</span></div>`;
+    }
+    if (!payload.new_keys && !payload.updated_keys && !payload.already_complete) {
+      html += `<p class="hint">Nothing was written.</p>`;
+    }
+    const dupKeys = Object.keys(payload.duplicate_keys || {});
+    if (dupKeys.length) {
+      html += `<div class="section-title summary-warn">Same key on more than one selected row</div>`;
+      dupKeys.forEach(k => {
+        const texts = payload.duplicate_keys[k].map(escapeHtml).join('" / "');
+        html += `<div class="hint">${escapeHtml(k)}: "${texts}" — merged into one catalog entry (still never overwrites an existing translation).</div>`;
+      });
+    }
   }
   if (payload.unrecognized_columns && payload.unrecognized_columns.length) {
     html += `<div class="section-title summary-warn">Not recognized as a language</div>`;
@@ -1157,6 +1245,7 @@ function init() {
   loadIosRecentPaths();
   loadIosLanguagePicker();
   refreshServiceAccountEmail();
+  checkSheetConnection();
   loadAppVersion();
   startEventPolling();
   checkForUpdate(false);

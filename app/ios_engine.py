@@ -255,30 +255,55 @@ def translate_string_to_languages(provider, client, text, context, target_langs)
         raise RuntimeError(f"{provider.upper()} error during translation: {e}") from e
 
 
+def _chunk_lang_dict(d, size):
+    """Same idea as engine.py's chunk_dict (not imported -- see this
+    module's docstring for why it deliberately doesn't depend on
+    engine.py), applied to target languages instead of keys."""
+    items = list(d.items())
+    for i in range(0, len(items), max(1, size)):
+        yield dict(items[i:i + size])
+
+
 def translate_string_with_retry(provider, client, text, context, target_langs,
-                                 max_retries=2, on_retry: Optional[Callable[[int, int], None]] = None):
+                                 max_retries=2, batch_size=25,
+                                 on_retry: Optional[Callable[[int, int], None]] = None):
     """
     Translates into every language in target_langs, retrying only the
     languages that didn't come back. Returns (results, still_missing_codes).
+
+    Languages are batched `batch_size` at a time per AI call, same
+    truncation-avoidance principle as Android's batch translation
+    (engine.py's chunk_dict, see HANDOFF's "do not remove this" note) --
+    asking one call to translate a string into a large number of languages
+    at once risks the same silent truncation batching by key already fixes
+    for Android. With the default ~10-11 selected languages this rarely
+    produces more than one batch; it only matters once a user selects
+    enough languages to approach `batch_size`. `max_retries` and
+    `batch_size` both come from the same shared Settings values Android's
+    batching already uses (`app/config.py`'s `max_retries`/`batch_size`),
+    not separate iOS-only settings.
     """
     results = {}
-    pending = dict(target_langs)
-    attempt = 0
-    while pending and attempt <= max_retries:
-        attempt += 1
-        try:
-            chunk_results = translate_string_to_languages(provider, client, text, context, pending)
-        except RuntimeError:
-            chunk_results = {}
-        for code, val in chunk_results.items():
-            if code in pending:
-                results[code] = val
-        pending = {code: name for code, name in pending.items() if code not in results}
-        if pending and attempt <= max_retries:
-            if on_retry:
-                on_retry(attempt, len(pending))
-            time.sleep(1)
-    return results, list(pending.keys())
+    still_missing = []
+    for batch_langs in _chunk_lang_dict(target_langs, batch_size):
+        pending = dict(batch_langs)
+        attempt = 0
+        while pending and attempt <= max_retries:
+            attempt += 1
+            try:
+                chunk_results = translate_string_to_languages(provider, client, text, context, pending)
+            except RuntimeError:
+                chunk_results = {}
+            for code, val in chunk_results.items():
+                if code in pending:
+                    results[code] = val
+            pending = {code: name for code, name in pending.items() if code not in results}
+            if pending and attempt <= max_retries:
+                if on_retry:
+                    on_retry(attempt, len(pending))
+                time.sleep(1)
+        still_missing.extend(pending.keys())
+    return results, still_missing
 
 
 def build_sheet_rows_for_session(session_entries, lang_display_names):
@@ -298,6 +323,32 @@ def build_sheet_rows_for_session(session_entries, lang_display_names):
     return master_sheet
 
 
+def _client_email(service_account_path):
+    """Best-effort read of just the client_email field, for a clearer
+    permission-error message below -- never raises, "" on any failure."""
+    try:
+        with open(service_account_path, "r", encoding="utf-8") as f:
+            return json.load(f).get("client_email", "")
+    except Exception:
+        return ""
+
+
+def _open_sheet(gs_client, sheet_id, service_account_path):
+    """gspread wraps a 403 in a bare, message-less PermissionError -- see
+    engine._open_sheet's docstring (identical fix, this module deliberately
+    doesn't import engine.py, see the module docstring, so it's duplicated
+    here rather than shared)."""
+    try:
+        return gs_client.open_by_key(sheet_id)
+    except PermissionError as e:
+        email = _client_email(service_account_path)
+        who = f" ({email})" if email else ""
+        raise PermissionError(
+            f"This service account{who} doesn't have access to this sheet. "
+            "Share the sheet with that address as an Editor, then try again."
+        ) from e
+
+
 def sync_ios_to_google_sheet(sheet_id, service_account_path, provider_name, master_sheet, lang_display_list):
     """Same tab-per-run export as engine.sync_to_google_sheet, labeled for iOS."""
     import gspread
@@ -306,15 +357,20 @@ def sync_ios_to_google_sheet(sheet_id, service_account_path, provider_name, mast
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name(service_account_path, scope)
     gs_client = gspread.authorize(creds)
-    sheet = gs_client.open_by_key(sheet_id)
+    sheet = _open_sheet(gs_client, sheet_id, service_account_path)
 
     tab_name = f"{provider_name.capitalize()} iOS Localization - {datetime.now().strftime('%b %d, %Y %I_%M %p')}"
     tab = sheet.add_worksheet(title=tab_name, rows=str(len(master_sheet) + 10), cols="20")
 
-    headers = ["Key", "English"] + lang_display_list
+    # No "Key" column, languages alphabetized by display name (English
+    # first) -- see engine.sync_to_google_sheet's identical comment for why
+    # (matches the shape of externally-round-tripped sheets, and Import
+    # already tolerates a key-less tab).
+    sorted_langs = sorted(lang_display_list)
+    headers = ["English"] + sorted_langs
     tab.append_row(headers)
 
-    rows = [[k, d.get('English', '')] + [d.get(l, "") for l in lang_display_list] for k, d in master_sheet.items()]
+    rows = [[d.get('English', '')] + [d.get(l, "") for l in sorted_langs] for d in master_sheet.values()]
     if rows:
         tab.append_rows(rows)
 
