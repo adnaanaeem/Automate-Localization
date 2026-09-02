@@ -3,24 +3,40 @@
 [![Download for Windows](https://img.shields.io/badge/Download-Windows%20Installer-4f8cff?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/adnaanaeem/Automate-Localization/releases/latest/download/AutomateLocalizationSetup.exe)
 [![Latest release](https://img.shields.io/github/v/release/adnaanaeem/Automate-Localization?style=for-the-badge&color=2450b8&label=latest)](https://github.com/adnaanaeem/Automate-Localization/releases/latest)
 
-A desktop app for Android developers that keeps `strings.xml` translations in
-sync across every language in your project — automatically, using AI.
+A desktop app that keeps your app's translations in sync — automatically,
+using AI. Supports **Android** (`strings.xml`) and **iOS** (Xcode String
+Catalog / `.xcstrings`).
 
-Point it at your English `strings.xml`, and it finds every string that's new
-or missing in each translated language (`values-de`, `values-ja`, `values-fr`,
-...), lets you review and pick exactly which ones to translate, then
-machine-translates only those (via Gemini or OpenAI) and writes them back
-into the right files — without ever touching a string that's already
-translated.
+**Android**: point it at your English `strings.xml`, and it finds every
+string that's new or missing in each translated language (`values-de`,
+`values-ja`, `values-fr`, ...), lets you review and pick exactly which ones
+to translate, then machine-translates only those (via Gemini or OpenAI) and
+writes them back into the right files — without ever touching a string
+that's already translated.
+
+**iOS**: type an English string, pick your target languages, and it's
+translated into all of them in one go and appended to your `.xcstrings`
+catalog — key auto-generated from the text the way iOS devs do it by hand,
+one string at a time. Switch between platforms with the toggle at the top
+of the app; neither one touches the other's files or settings.
+
+**Import from Sheet**: the reverse direction — pull rows back from a tab in
+your Google Sheet (after a reviewer's QA'd or edited them), pick which ones,
+and write them into a local Android or iOS project file, same
+never-overwrite rule as everywhere else in this app.
 
 > **Full disclosure:** I built this purely for my own convenience, entirely by vibe-coding with Claude. I did not personally write a single line of it — didn't shoot one arrow myself. Every bug fix, every feature, every questionable variable name: all Claude. I just kept saying "yes, do that" and occasionally "no, not like that."
 
-![Setup screen — path, target languages, provider, and batching](docs/screenshots/setup.png)
+![Setup screen — path, target languages, and batching](docs/screenshots/setup.png)
 
 <table>
 <tr>
 <td width="50%"><img src="docs/screenshots/review.png" alt="Review screen — filterable checklist of missing strings" /></td>
 <td width="50%"><img src="docs/screenshots/results.png" alt="Results screen — per-language write counts and Sheet sync status" /></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/settings.png" alt="Settings screen — AI provider keys and Google Sheet QA export, shared across Android, iOS, and Import" /></td>
+<td width="50%"><img src="docs/screenshots/import.png" alt="Import screen — review rows pulled back from a Google Sheet tab before writing them into a project file" /></td>
 </tr>
 </table>
 
@@ -46,6 +62,9 @@ step while staying safe:
 - 🔐 **Keys never touch disk** — API keys are entered once in the app and stored in your OS keychain via [`keyring`](https://pypi.org/project/keyring/), never written to a file or committed anywhere.
 - 📋 **Optional Google Sheets QA export** — after a run, sync exactly the strings that were newly translated (backfilled with every language's current value for context) to a fresh tab in a Google Sheet for reviewers.
 - 🔄 **Checks GitHub for updates on launch** — a banner appears if a newer release is available, with a one-click download-and-install; also available anytime from the **☰ Menu → Check for updates**.
+- 🍎 **iOS, one string at a time** — type an English string, add optional context to help the AI translate it accurately, pick languages (defaults to Android's 10 plus Portuguese-Portugal, since iOS apps typically ship both Brazil and Portugal variants), and it's translated into all of them in a single call and appended to your `.xcstrings` catalog, key auto-generated from the text. Never overwrites a language already present for an existing key.
+- ⬇️ **Import from Google Sheet** — the reverse direction: pick a tab, review the rows pulled back (works even for sheets with no "Key" column — a key is auto-generated from the English text), select which ones, and write them into a local Android or iOS file.
+- ⚙️ **Centralized Settings** — AI provider keys and Google Sheet config live in one place (**☰ Menu → Settings**), shared by Android, iOS, and Import instead of being set up separately per screen.
 
 ## Prerequisites
 
@@ -61,26 +80,75 @@ No Python required. **[Download the latest installer](https://github.com/adnaana
 >
 > Prefer a portable exe with no installer? Build it yourself from source (below) — `dist/AutomateLocalization.exe` isn't published as a separate release download.
 
-## Run from source
+## Run from source (Windows, macOS)
 
 ```bash
 python -m pip install -r requirements.txt
 python app/main.py
 ```
 
-## Usage
+Needs Python 3.9+. Requirements are the same on both platforms — `keyring`
+automatically uses macOS Keychain instead of Windows Credential Manager for
+API-key storage, no extra setup needed.
+
+**macOS**: there's no packaged installer yet (only Windows has one right
+now — a macOS build is a possible future addition, not decided). Running
+from source is the only way to use this app on a Mac today. The app itself
+has no Windows-only code paths in its normal operation — the one place that
+did (how the self-updater detaches the installer process after download)
+is now guarded to use the correct approach per platform — but a packaged
+Mac build has never actually been produced or tested end-to-end, so treat
+this as "should work" rather than "verified," and open an issue if
+something doesn't.
+
+## Usage — Settings
+
+**☰ Menu → Settings** holds everything shared across all three platform
+screens: your Gemini/OpenAI API key(s) (saved to your OS keychain, not a
+file) and the optional Google Sheet QA export config (Sheet ID + service
+account JSON, with step-by-step instructions for finding your Sheet ID and
+sharing it with the service account's email). Set these up once — Android,
+iOS, and Import all read from the same place, rather than each having its
+own copy.
+
+## Usage — Android
 
 1. **Setup tab**
    - Browse to your English `strings.xml` (the one under `.../res/values/`, not the project root).
-   - Enter your Gemini or OpenAI API key once — it's saved to your OS keychain, not to a file.
    - Optionally, check any additional languages you want new `values-<code>/` folders created for.
-   - Optionally, turn on Google Sheet sync and point at a service account JSON.
 2. **Scan** — the app diffs every `values-xx/` folder against English, independently per language, and lists variant/unrecognized folders separately so nothing is silently skipped.
 3. **Review** — every missing string is shown with a checkbox (checked by default) and which languages it's missing in. Type in the filter box to narrow the list by key or English text — handy for a large app. Deselect anything you don't want translated this run.
 4. **Run** — translates only the selected strings, in batches, with live per-language progress and a log of any retries.
 5. **Results** — a summary of what was written per language, anything still missing after retries (safe to rerun — it'll be picked back up on the next scan), and Google Sheet sync status.
 
-The **☰ Menu** (top-right) has two things: **Check for updates** (also runs automatically on launch — a banner appears if a newer release exists) and **About** (the developer's GitHub profile, fetched live).
+## Usage — iOS
+
+Switch to **🍎 iOS** with the toggle at the top of the app. This flow is
+different from Android's on purpose — there's no scan/diff step, since
+there's no single source file to compare against. Instead:
+
+1. **Load a catalog** — browse to an existing `.xcstrings` file, or type a path to create a new one, then click **Load**.
+2. **Pick target languages** — pre-checked with the same 10 languages Android's defaults use, plus Portuguese (Portugal) as the one extra (iOS apps conventionally ship both Brazil and Portugal variants).
+3. **Add a string** — type the English text (multi-line is fine — Xcode string catalogs commonly have embedded line breaks), and optionally add context to help the AI translate it accurately (stored as the entry's Xcode "comment", same as `NSLocalizedString(..., comment:)`). The key auto-fills as you type, using the same lowercase-and-underscore convention iOS devs use by hand (editable if you want something different). Click **Translate & Add** — it's translated into every selected language in one go and appended to the catalog file, without ever overwriting a language that key already has.
+4. Repeat for as many strings as you need — each one shows up in **This session** below.
+5. **Upload session to Sheet** — sends everything added this session to a fresh tab in your configured Google Sheet (Sheet ID/service account from **☰ Menu → Settings**), for QA review.
+
+![iOS screen — loaded catalog, target languages, Add a string with context, and this session's table](docs/screenshots/ios.png)
+
+## Usage — Import
+
+Switch to **⬇️ Import** to pull rows back from a Google Sheet tab — after a
+reviewer has QA'd or edited them there — and write them into a local
+project file:
+
+1. **Load tabs** — lists every tab in the Sheet configured on the Settings screen (shown read-only at the top, with a link to change it there).
+2. **Pick a tab and Fetch strings** — every row with an English value is pulled back. A "Key" column is used if the tab has one; if not (or a specific row's Key cell is empty), a key is auto-generated from the English text and flagged with a `*` in the review table so it's clear it wasn't in the sheet.
+3. **Review and select** — filter by key or English text, deselect anything you don't want written.
+4. **Pick Android or iOS and a target file, then Write selected** — reuses the same never-overwrite write path as a normal translation run, so it never touches a key/language pair that's already there.
+
+![Import screen — review table with an auto-generated key flagged, and the write-to-project card](docs/screenshots/import.png)
+
+The **☰ Menu** (top-right) has **Settings** (AI provider keys and Google Sheet config, shared across all three screens), **Check for updates** (also runs automatically on launch — a banner appears if a newer release exists), and **About** (the developer's GitHub profile, fetched live).
 
 ## How it works, briefly
 
@@ -104,7 +172,9 @@ script this app's engine was ported from.
 ```
 app/
   main.py       # pywebview entry point / JS-facing API
-  engine.py     # scan/translate/write logic
+  engine.py     # Android scan/translate/write logic
+  ios_engine.py # iOS translate/write logic (.xcstrings) -- separate from engine.py, see its module docstring for why
+  sheet_import.py # reads rows back from a Sheet tab, writes into Android/iOS files -- the reverse of the two sync paths above
   config.py     # local settings + OS-keychain API key storage
   providers.py  # Gemini/OpenAI client setup
   updater.py    # checks GitHub Releases, downloads + launches the installer
@@ -146,18 +216,27 @@ To also build the installer, you'll additionally need [Inno Setup](https://jrsof
 which writes `dist_installer\AutomateLocalizationSetup.exe`.
 
 **Screenshots** in this README (`docs/screenshots/`) are generated, not
-hand-captured — `scripts/demo_*.html` fake the `window.pywebview.api` layer
-with realistic sample data so the real `app/web/` UI can be rendered
-headlessly:
+hand-captured — `scripts/demo.html` is a copy of `app/web/index.html` with
+a fake `window.pywebview.api` layer (realistic sample data) so the real UI
+can be rendered headlessly, one screen per `?screen=` value:
 
 ```bash
 python -m http.server 8935 --directory .
-# then, per screenshot:
-"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless=new --disable-gpu --window-size=1100,1500 --screenshot="docs\screenshots\setup.png" "http://localhost:8935/scripts/demo_setup.html"
+# then, per screenshot (screen = setup | review | results | settings | ios | import):
+"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless=new --disable-gpu --user-data-dir="%TEMP%\edge_shot" --window-size=1100,1500 --screenshot="docs\screenshots\setup.png" "http://localhost:8935/scripts/demo.html?screen=setup"
 ```
 
-Re-run this (and re-crop as needed) after any visible UI change so the
-README doesn't go stale.
+A dedicated `--user-data-dir` matters — without it, if a normal (non-headless)
+Edge window is already running, the headless invocation just hands off to
+that instance and exits without ever taking the screenshot.
+
+If `index.html`'s markup changes, re-copy its `<body>` into `demo.html`
+(everything between the mock-api `<script>` and the trailing `app.js` script
+tag is untouched) before regenerating — see the comment at the top of that
+file. Screenshots are captured taller than needed (so content of any length
+fits); trim the padding with `python scripts/crop_screenshots.py` (needs
+`pip install Pillow`) after generating all of them. Re-run both steps after
+any visible UI change so the README doesn't go stale.
 
 ## Security
 

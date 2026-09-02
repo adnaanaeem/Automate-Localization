@@ -8,6 +8,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import urllib.request
 
@@ -82,10 +83,18 @@ def download_and_launch_installer(download_url, on_progress=None):
                 if on_progress:
                     on_progress(downloaded, total)
 
-    # DETACHED_PROCESS + CREATE_NEW_PROCESS_GROUP so the installer survives
-    # this process exiting right after.
-    subprocess.Popen(
-        [installer_path],
-        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-    )
+    # Detach the installer so it survives this process exiting right after.
+    # subprocess.DETACHED_PROCESS/CREATE_NEW_PROCESS_GROUP only exist on
+    # Windows (AttributeError on Mac/Linux) -- there's no shipped installer
+    # asset for those platforms yet (INSTALLER_ASSET_NAME above is Windows-
+    # only, so check_for_update() never reports an update on them and this
+    # function is unreachable there today), but this is cheap to make
+    # correct now rather than leave as a landmine for whenever that changes.
+    if sys.platform == "win32":
+        subprocess.Popen(
+            [installer_path],
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+    else:
+        subprocess.Popen([installer_path], start_new_session=True)
     return installer_path

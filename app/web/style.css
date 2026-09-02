@@ -101,7 +101,7 @@ main { max-width: 900px; margin: 0 auto; padding: 24px; }
 
 label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
 
-input[type="text"], input[type="password"], input[type="number"] {
+input[type="text"], input[type="password"], input[type="number"], select {
   width: 100%;
   background: #0d0f14;
   border: 1px solid var(--border);
@@ -110,11 +110,13 @@ input[type="text"], input[type="password"], input[type="number"] {
   border-radius: 6px;
   font-size: 13px;
 }
-input:focus { outline: none; border-color: var(--accent); }
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+select:disabled { color: var(--text-dim); cursor: not-allowed; }
 
 .row { display: flex; gap: 10px; align-items: flex-end; }
 .row > input { flex: 1; }
 .row > div { flex: 1; }
+.row > select { flex: 2; }
 
 .radio { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); width: auto; }
 .radio input { width: auto; }
@@ -141,6 +143,8 @@ input:focus { outline: none; border-color: var(--accent); }
 .hidden { display: none !important; }
 
 .hint { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+.hint ol { margin: 4px 0 0 0; padding-left: 18px; }
+.hint ol li { margin-bottom: 4px; }
 .error-text { font-size: 12px; color: var(--err); min-height: 16px; margin-top: 6px; }
 .status-text { font-size: 13px; color: var(--text-dim); }
 .key-status { font-size: 11px; }
@@ -173,6 +177,13 @@ tbody td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-a
 tbody tr:last-child td { border-bottom: none; }
 .col-check { width: 32px; }
 .key-cell { font-family: "SF Mono", Consolas, monospace; font-size: 12px; color: var(--text-dim); }
+
+#import-table { table-layout: fixed; }
+.col-key-narrow { width: 140px; }
+#import-table .key-cell {
+  max-width: 140px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; cursor: default;
+}
 .badge {
   display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 999px;
   background: #2a1f14; color: var(--warn); margin: 2px 3px 0 0; border: 1px solid #4a3620;
@@ -230,3 +241,23 @@ tbody tr:last-child td { border-bottom: none; }
 .selected-lang-chip .remove-x { cursor: pointer; color: var(--text-dim); font-weight: 700; padding: 0 3px; line-height: 1; }
 .selected-lang-chip .remove-x:hover { color: var(--err); }
 .lang-selected-empty { font-size: 12px; color: var(--text-dim); }
+
+.platform-toggle { display: flex; gap: 6px; }
+.platform-btn {
+  background: #232734; border: 1px solid var(--border); color: var(--text-dim);
+  padding: 6px 12px; border-radius: 999px; font-size: 12px; cursor: pointer;
+}
+.platform-btn:hover { color: var(--text); }
+.platform-btn.active { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+textarea {
+  width: 100%; background: #0d0f14; border: 1px solid var(--border); color: var(--text);
+  padding: 8px 10px; border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical;
+}
+textarea:focus { outline: none; border-color: var(--accent); }
+.ios-textarea { min-height: 70px; margin-bottom: 12px; }
+#ios-context-input { margin-bottom: 12px; }
+
+#ios-session-table .badge { margin-right: 3px; }
+.ios-lang-ok { color: var(--ok); }
+.ios-lang-warn { color: var(--warn); }

@@ -4,6 +4,7 @@ frontend in web/index.html; the Python side is the engine from engine.py
 called directly, no HTTP server involved.
 """
 
+import json
 import os
 import sys
 import threading
@@ -22,7 +23,9 @@ else:
 
 import config
 from engine import LocalizationEngine, sync_to_google_sheet, get_all_language_options
+import ios_engine
 import providers
+import sheet_import
 import updater
 from version import APP_VERSION
 
@@ -59,6 +62,7 @@ class Api:
         cfg = config.load_config()
         return {
             "recent_paths": cfg.get("recent_paths", []),
+            "recent_ios_paths": cfg.get("recent_ios_paths", []),
             "last_provider": cfg.get("last_provider", "gemini"),
             "batch_size": cfg.get("batch_size", 25),
             "max_retries": cfg.get("max_retries", 10),
@@ -78,9 +82,9 @@ class Api:
         config.save_config(cfg)
         return {"ok": True}
 
-    def remove_recent_path(self, path):
+    def remove_recent_path(self, path, key="recent_paths"):
         cfg = config.load_config()
-        config.remove_recent_path(cfg, path)
+        config.remove_recent_path(cfg, path, key=key)
         config.save_config(cfg)
         return {"ok": True}
 
@@ -311,6 +315,217 @@ class Api:
             "sheet_tab_name": sheet_tab_name,
         }
         self._emit("onTranslationDone", payload)
+
+    # --- iOS -------------------------------------------------------------------
+    # Fundamentally different shape from the Android flow above: no scan/diff
+    # step, no batching -- a developer types one English string at a time and
+    # it's translated into every selected language in one call. See
+    # ios_engine.py's module docstring for why this is a separate module
+    # rather than bolted onto engine.py.
+
+    def get_ios_language_options(self):
+        return ios_engine.get_all_ios_language_options()
+
+    def ios_generate_key(self, english_text):
+        return ios_engine.generate_key(english_text)
+
+    def choose_ios_catalog_file(self):
+        result = self._window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            file_types=("Xcode String Catalog (*.xcstrings)", "All files (*.*)"),
+            save_filename="Localizable.xcstrings",
+        )
+        if not result:
+            return {"ok": False}
+        return {"ok": True, "path": result[0]}
+
+    def ios_load_catalog_info(self, catalog_path):
+        if not catalog_path.lower().endswith(".xcstrings"):
+            return {"ok": False, "error": "That doesn't look like a .xcstrings path -- paste or browse to the actual file (e.g. .../Localizable.xcstrings), not the English text you're localizing."}
+
+        catalog = ios_engine.load_catalog(catalog_path)
+        if catalog is None:
+            return {"ok": False, "error": f"{catalog_path} exists but could not be parsed as a valid .xcstrings file -- refusing to touch it."}
+
+        cfg = config.load_config()
+        config.add_recent_path(cfg, catalog_path, key="recent_ios_paths")
+        config.save_config(cfg)
+
+        return {"ok": True, "existing_key_count": len(catalog.get("strings", {}))}
+
+    def ios_translate_and_add(self, catalog_path, key, english_text, context, target_codes, provider):
+        threading.Thread(
+            target=self._ios_translate_and_add_thread,
+            args=(catalog_path, key, english_text, context, list(target_codes), provider),
+            daemon=True,
+        ).start()
+        return {"ok": True}
+
+    def _ios_translate_and_add_thread(self, catalog_path, key, english_text, context, target_codes, provider):
+        try:
+            api_key = config.get_api_key(provider)
+            client, model_name = providers.get_client(provider, api_key)
+        except Exception as e:
+            self._emit("onIosAddError", str(e))
+            return
+
+        catalog = ios_engine.load_catalog(catalog_path)
+        if catalog is None:
+            self._emit("onIosAddError", f"{catalog_path} exists but could not be parsed as a valid .xcstrings file -- refusing to write to it.")
+            return
+
+        target_langs = {c: n for c, n in ios_engine.IOS_LANG_DISPLAY_NAMES.items() if c in target_codes}
+
+        def on_retry(attempt, n_pending):
+            self._emit("onIosAddLog", f"Retry {attempt}: {n_pending} language(s) still missing, retrying...")
+
+        try:
+            translations, still_missing = ios_engine.translate_string_with_retry(
+                provider, client, english_text, context, target_langs, on_retry=on_retry,
+            )
+        except Exception as e:
+            self._emit("onIosAddError", str(e))
+            return
+
+        merge_result = ios_engine.add_string_to_catalog(catalog, key, english_text, translations, context=context)
+        try:
+            ios_engine.save_catalog(catalog_path, catalog)
+        except Exception as e:
+            self._emit("onIosAddError", f"Translated successfully but failed to write {catalog_path}: {e}")
+            return
+
+        self._emit("onIosAddDone", {
+            "key": key,
+            "english_text": english_text,
+            "translations": translations,
+            "added": merge_result["added"],
+            "skipped_existing": merge_result["skipped_existing"],
+            "still_missing": still_missing,
+        })
+
+    def ios_upload_session_to_sheet(self, session_entries, provider):
+        threading.Thread(
+            target=self._ios_upload_session_thread,
+            args=(list(session_entries), provider),
+            daemon=True,
+        ).start()
+        return {"ok": True}
+
+    def _ios_upload_session_thread(self, session_entries, provider):
+        cfg = config.load_config()
+        sheet_id = cfg.get("google_sheet_id", "")
+        sa_path = cfg.get("service_account_path", "")
+        if not sheet_id or not sa_path:
+            self._emit("onIosSheetUploadError", "Sheet ID or service account file isn't configured (Settings screen).")
+            return
+
+        used_codes = {code for item in session_entries for code in item.get("translations", {})}
+        lang_display_list = [ios_engine.IOS_LANG_DISPLAY_NAMES[c] for c in used_codes if c in ios_engine.IOS_LANG_DISPLAY_NAMES]
+        lang_display_map = {c: ios_engine.IOS_LANG_DISPLAY_NAMES[c] for c in used_codes if c in ios_engine.IOS_LANG_DISPLAY_NAMES}
+
+        master_sheet = ios_engine.build_sheet_rows_for_session(session_entries, lang_display_map)
+        try:
+            tab_name = ios_engine.sync_ios_to_google_sheet(sheet_id, sa_path, provider, master_sheet, lang_display_list)
+        except Exception as e:
+            self._emit("onIosSheetUploadError", str(e) or f"{type(e).__name__} (no message -- see log for details)")
+            return
+        self._emit("onIosSheetUploadDone", {"tab_name": tab_name, "count": len(session_entries)})
+
+    # --- Import from Sheet ------------------------------------------------
+    # The reverse direction of both platforms' Sheet sync above: read rows
+    # a reviewer has already QA'd/edited in the Sheet back out, let the
+    # user pick which ones, then write them into a local project file.
+    # Writing itself reuses engine.append_to_xml_file / ios_engine's
+    # add_string_to_catalog+save_catalog -- see sheet_import.py, this is
+    # just the Api-layer plumbing (background threads + the event queue,
+    # same pattern as every other network/file call in this class).
+
+    def get_service_account_email(self):
+        """
+        Reads just the client_email field out of the configured service
+        account JSON, so Settings/Import can show it directly instead of
+        sending the user to go dig it out of the file themselves.
+        Deliberately reads nothing else out of that file -- exposing
+        private_key here would defeat the whole point of keeping it out of
+        the UI. Returns "" on any error (missing/unset path, unreadable
+        file, malformed JSON, missing field) rather than raising -- this is
+        a convenience hint, not something that should ever block using the
+        app.
+        """
+        sa_path = config.load_config().get("service_account_path", "")
+        if not sa_path:
+            return ""
+        try:
+            with open(sa_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("client_email", "")
+        except Exception:
+            return ""
+
+    def sheet_list_tabs(self):
+        threading.Thread(target=self._sheet_list_tabs_thread, daemon=True).start()
+        return {"ok": True}
+
+    def _sheet_list_tabs_thread(self):
+        # Sheet ID and service account both come from the shared Settings
+        # config now -- Import no longer has its own override fields, so
+        # there's a single source of truth for "which sheet/account".
+        cfg = config.load_config()
+        sheet_id = cfg.get("google_sheet_id", "")
+        sa_path = cfg.get("service_account_path", "")
+        if not sheet_id:
+            self._emit("onSheetTabsError", "Set a Google Sheet ID on the Settings screen first.")
+            return
+        if not sa_path:
+            self._emit("onSheetTabsError", "Set a service account JSON on the Settings screen first.")
+            return
+        try:
+            tabs = sheet_import.list_worksheets(sheet_id, sa_path)
+        except Exception as e:
+            self._emit("onSheetTabsError", str(e) or f"{type(e).__name__} (no message -- see log for details)")
+            return
+        self._emit("onSheetTabsDone", tabs)
+
+    def sheet_fetch_tab(self, tab_name):
+        threading.Thread(target=self._sheet_fetch_tab_thread, args=(tab_name,), daemon=True).start()
+        return {"ok": True}
+
+    def _sheet_fetch_tab_thread(self, tab_name):
+        cfg = config.load_config()
+        sheet_id = cfg.get("google_sheet_id", "")
+        sa_path = cfg.get("service_account_path", "")
+        if not sheet_id:
+            self._emit("onSheetFetchError", "Set a Google Sheet ID on the Settings screen first.")
+            return
+        if not sa_path:
+            self._emit("onSheetFetchError", "Set a service account JSON on the Settings screen first.")
+            return
+        try:
+            result = sheet_import.fetch_sheet_rows(sheet_id, sa_path, tab_name)
+        except Exception as e:
+            self._emit("onSheetFetchError", str(e) or f"{type(e).__name__} (no message -- see log for details)")
+            return
+        self._emit("onSheetFetchDone", result)
+
+    def sheet_import_write(self, platform, path, selected_rows):
+        threading.Thread(
+            target=self._sheet_import_write_thread,
+            args=(platform, path, list(selected_rows)),
+            daemon=True,
+        ).start()
+        return {"ok": True}
+
+    def _sheet_import_write_thread(self, platform, path, selected_rows):
+        try:
+            if platform == "android":
+                base_res_path = os.path.dirname(os.path.dirname(path))
+                result = sheet_import.import_to_android(base_res_path, selected_rows)
+                self._emit("onSheetImportDone", {"platform": "android", **result})
+            else:
+                result = sheet_import.import_to_ios(path, selected_rows)
+                self._emit("onSheetImportDone", {"platform": "ios", **result})
+        except Exception as e:
+            self._emit("onSheetImportError", str(e) or f"{type(e).__name__} (no message -- see log for details)")
 
 
 def main():

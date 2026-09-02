@@ -1,9 +1,22 @@
+<!--
+  Generates every README screenshot from ONE file, driven by a ?screen=
+  query param (setup | review | results | settings | ios | import). This
+  replaces the old per-screen demo_*.html files, which hand-duplicated a
+  trimmed copy of index.html's markup -- that drifted silently out of sync
+  every time index.html actually changed (exactly what happened to the
+  Setup screenshot when the AI Provider / Google Sheet cards moved out to
+  the new Settings screen). This file's <body> is instead a byte-for-byte
+  copy of app/web/index.html (paths adjusted to ../app/web/), so there's
+  nothing to keep in sync except re-copying that body after a markup
+  change -- see README.md's "Screenshots" note for the regeneration
+  command for each screen.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <title>Automate Localization</title>
-<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="../app/web/style.css" />
 </head>
 <body>
 <header class="topbar">
@@ -337,6 +350,164 @@
 
 </main>
 
-<script src="app.js"></script>
+<script>
+// --- Mock window.pywebview.api -- set BEFORE app.js loads, so app.js's
+// `if (window.pywebview) init();` branch fires immediately and synchronously
+// wires every screen (real init(), not a hand-picked subset -- this is what
+// keeps this file from drifting the way the old per-screen demos did).
+const IOS_LANG_OPTIONS = [
+  { code: "de", display_name: "German", flag: "🇩🇪", is_default: true },
+  { code: "es", display_name: "Spanish", flag: "🇪🇸", is_default: true },
+  { code: "fr", display_name: "French", flag: "🇫🇷", is_default: true },
+  { code: "ja", display_name: "Japanese", flag: "🇯🇵", is_default: true },
+  { code: "pt-BR", display_name: "Portuguese (Brazil)", flag: "🇧🇷", is_default: true },
+  { code: "pt-PT", display_name: "Portuguese (Portugal)", flag: "🇵🇹", is_default: true },
+];
+const LANG_OPTIONS = [
+  { code: "de", display_name: "German", flag: "🇩🇪", legacy_default: true },
+  { code: "es", display_name: "Spanish", flag: "🇪🇸", legacy_default: true },
+  { code: "fr", display_name: "French", flag: "🇫🇷", legacy_default: true },
+  { code: "ja", display_name: "Japanese", flag: "🇯🇵", legacy_default: true },
+  { code: "ko", display_name: "Korean", flag: "🇰🇷", legacy_default: true },
+  { code: "pt", display_name: "Portuguese (Brazil)", flag: "🇵🇹", legacy_default: true },
+  { code: "ru", display_name: "Russian", flag: "🇷🇺", legacy_default: true },
+  { code: "it", display_name: "Italian", flag: "🇮🇹", legacy_default: true },
+  { code: "in", display_name: "Indonesian", flag: "🇮🇩", legacy_default: true },
+  { code: "zh-rCN", display_name: "Chinese (Simplified)", flag: "🇨🇳", legacy_default: true },
+  { code: "ar", display_name: "Arabic", flag: "🇸🇦", legacy_default: false },
+  { code: "hi", display_name: "Hindi", flag: "🇮🇳", legacy_default: false },
+];
+
+window.pywebview = { api: {
+  get_settings: async () => ({
+    recent_paths: [
+      "E:\\AndroidApps\\ShopEase\\app\\src\\main\\res\\values\\strings.xml",
+      "E:\\AndroidApps\\FitTrack\\app\\src\\main\\res\\values\\strings.xml",
+    ],
+    recent_ios_paths: ["E:\\iOSApps\\ShopEase\\ShopEase\\Localizable.xcstrings"],
+    last_provider: "gemini", batch_size: 25, max_retries: 10,
+    sheet_sync_enabled: true,
+    google_sheet_id: "1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvWxYz",
+    service_account_path: "C:\\Users\\dev\\service_account.json",
+    has_gemini_key: true, has_openai_key: false,
+  }),
+  save_settings: async () => ({ ok: true }),
+  remove_recent_path: async () => ({ ok: true }),
+  get_language_options: async () => LANG_OPTIONS,
+  get_ios_language_options: async () => IOS_LANG_OPTIONS,
+  ios_generate_key: async (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, ""),
+  choose_strings_file: async () => ({ ok: true, path: "" }),
+  choose_ios_catalog_file: async () => ({ ok: true, path: "" }),
+  choose_service_account_file: async () => ({ ok: true, path: "" }),
+  set_api_key: async () => ({ ok: true }),
+  get_service_account_email: async () => "localization-bot@shopease-app.iam.gserviceaccount.com",
+  get_app_version: async () => "1.2.0",
+  check_for_update: async () => ({ ok: true }),
+  scan: async () => ({ ok: true, result: {} }),
+  run_translation: async () => ({ ok: true }),
+  ios_load_catalog_info: async () => ({ ok: true, existing_key_count: 12 }),
+  ios_translate_and_add: async () => ({ ok: true }),
+  ios_upload_session_to_sheet: async () => ({ ok: true }),
+  sheet_list_tabs: async () => ({ ok: true }),
+  sheet_fetch_tab: async () => ({ ok: true }),
+  sheet_import_write: async () => ({ ok: true }),
+  poll_events: async () => [],
+}};
+</script>
+<script src="../app/web/app.js"></script>
+<script>
+// --- Per-screen sample data, applied after the real init() has wired and
+// loaded everything above. A short delay lets init()'s async get_settings()
+// round-trip (and its DOM updates) settle before this overwrites anything.
+setTimeout(() => {
+  const screen = new URLSearchParams(location.search).get("screen") || "setup";
+
+  if (screen === "setup") {
+    showScreen("setup");
+  }
+
+  else if (screen === "review") {
+    scanResult = {
+      eng_count: 42,
+      languages: { de: "German", fr: "French", ja: "Japanese" },
+      variant_folders: ["values-land"],
+      unrecognized_folders: [],
+      parse_errors: [],
+      invalid_lang_codes: [],
+      keys: [
+        { key: "login_button", text: "Log in", missing_in: ["de"] },
+        { key: "login_forgot_password", text: "Forgot your password?", missing_in: ["de", "ja"] },
+        { key: "signup_button", text: "Create account", missing_in: ["de", "fr", "ja"] },
+        { key: "signup_terms_notice", text: "By signing up you agree to our Terms of Service", missing_in: ["ja"] },
+        { key: "logout_confirm_title", text: "Log out?", missing_in: ["de"] },
+        { key: "logout_confirm_message", text: "You'll need to log in again to access your account", missing_in: ["de", "fr"] },
+        { key: "cart_empty_message", text: "Your cart is empty", missing_in: ["ja"] },
+        { key: "cart_checkout_button", text: "Proceed to checkout", missing_in: ["de", "ja"] },
+        { key: "error_network", text: "Network error, please try again", missing_in: ["de"] },
+        { key: "error_login_invalid", text: "Incorrect email or password", missing_in: ["de", "fr"] },
+      ],
+    };
+    renderReviewScreen();
+    document.getElementById("review-filter-input").value = "login";
+    applyReviewFilter();
+    showScreen("review");
+  }
+
+  else if (screen === "results") {
+    renderResultsScreen({
+      written: { German: 6, French: 4, Japanese: 8 },
+      failures: {},
+      variant_written: { "values-land": 6 },
+      sheet_status: "synced",
+      sheet_error: null,
+      sheet_tab_name: "Gemini Localization - Aug 18, 2026 06_42 PM",
+    });
+    showScreen("results");
+  }
+
+  else if (screen === "settings") {
+    document.querySelector(".steps").classList.add("hidden");
+    document.querySelectorAll(".platform-btn").forEach(b => b.classList.remove("active"));
+    showScreen("settings");
+  }
+
+  else if (screen === "ios") {
+    switchPlatform("ios");
+    document.getElementById("ios-path-input").value = "E:\\iOSApps\\ShopEase\\ShopEase\\Localizable.xcstrings";
+    document.getElementById("ios-load-status").textContent = "Ready — 12 existing string(s) in this catalog.";
+    document.getElementById("ios-main").classList.remove("hidden");
+    document.getElementById("ios-text-input").value = "A request has been sent to Receiver Device.\nPlease accept it to continue.";
+    document.getElementById("ios-context-input").value = "Shown on the pairing screen after tapping Connect";
+    document.getElementById("ios-key-input").value = "a_request_has_been_sent_to_receiver_device_please_accept_it_to_continue";
+    iosSession = [
+      { key: "pairing_title", english_text: "Pair a new device", translations: { de: "Neues Gerät koppeln", "pt-BR": "Parear novo dispositivo", "pt-PT": "Emparelhar novo dispositivo" } },
+      { key: "pairing_success_message", english_text: "Your device is now connected.", translations: { de: "Dein Gerät ist jetzt verbunden.", "pt-BR": "Seu dispositivo está conectado.", "pt-PT": "O seu dispositivo está agora ligado." } },
+    ];
+    renderIosSessionTable();
+  }
+
+  else if (screen === "import") {
+    switchPlatform("import");
+    const tabSelect = document.getElementById("import-tab-select");
+    tabSelect.innerHTML = "";
+    ["Gemini Localization - Aug 30, 2026 11_20 AM", "Gemini iOS Localization - Aug 30, 2026 11_25 AM"].forEach(t => {
+      const opt = document.createElement("option");
+      opt.value = t; opt.textContent = t;
+      tabSelect.appendChild(opt);
+    });
+    tabSelect.disabled = false;
+    document.getElementById("import-fetch-btn").disabled = false;
+
+    importRows = [
+      { key: "welcome_msg", english: "Welcome!", values: { German: "Willkommen!", French: "Bienvenue!", Japanese: "ようこそ!" }, key_was_generated: false },
+      { key: "device_please", english: "Device.\\nPlease accept.", values: { German: "Gerät. Bitte akzeptieren." }, key_was_generated: true },
+      { key: "cart_empty_message", english: "Your cart is empty", values: { German: "Ihr Warenkorb ist leer", French: "Votre panier est vide" }, key_was_generated: false },
+    ];
+    renderImportTable();
+    document.getElementById("import-review").classList.remove("hidden");
+    document.getElementById("import-android-path-input").value = "E:\\AndroidApps\\ShopEase\\app\\src\\main\\res\\values\\strings.xml";
+  }
+}, 50);
+</script>
 </body>
 </html>

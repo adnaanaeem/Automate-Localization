@@ -23,6 +23,7 @@ _LEGACY_KEYRING_SERVICE = _LEGACY_APP_NAME
 
 DEFAULT_CONFIG = {
     "recent_paths": [],
+    "recent_ios_paths": [],
     "last_provider": "gemini",
     "batch_size": 25,
     "max_retries": 10,
@@ -79,16 +80,16 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2)
 
 
-def add_recent_path(cfg, path):
-    paths = cfg.get("recent_paths", [])
+def add_recent_path(cfg, path, key="recent_paths"):
+    paths = cfg.get(key, [])
     paths = [p for p in paths if p != path]
     paths.insert(0, path)
-    cfg["recent_paths"] = paths[:5]
+    cfg[key] = paths[:5]
     return cfg
 
 
-def remove_recent_path(cfg, path):
-    cfg["recent_paths"] = [p for p in cfg.get("recent_paths", []) if p != path]
+def remove_recent_path(cfg, path, key="recent_paths"):
+    cfg[key] = [p for p in cfg.get(key, []) if p != path]
     return cfg
 
 
