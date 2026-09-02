@@ -1,6 +1,7 @@
 # Automate Localization
 
 [![Download for Windows](https://img.shields.io/badge/Download-Windows%20Installer-4f8cff?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/adnaanaeem/Automate-Localization/releases/latest/download/AutomateLocalizationSetup.exe)
+[![Download for macOS](https://img.shields.io/badge/Download-macOS%20.dmg-4f8cff?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/adnaanaeem/Automate-Localization/releases/latest/download/AutomateLocalization.dmg)
 [![Latest release](https://img.shields.io/github/v/release/adnaanaeem/Automate-Localization?style=for-the-badge&color=2450b8&label=latest)](https://github.com/adnaanaeem/Automate-Localization/releases/latest)
 
 A desktop app that keeps your app's translations in sync — automatically,
@@ -82,7 +83,7 @@ No Python required. **[Download the latest installer](https://github.com/adnaana
 
 ## Download (macOS)
 
-Grab `AutomateLocalization.dmg` from the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases), open it, and drag the app into `Applications`.
+**[Download the latest .dmg](https://github.com/adnaanaeem/Automate-Localization/releases/latest/download/AutomateLocalization.dmg)** (`AutomateLocalization.dmg`) — or grab it from the [Releases page](https://github.com/adnaanaeem/Automate-Localization/releases) if you'd rather see the changelog first. Open it and drag the app into `Applications`.
 
 > The build isn't signed or notarized (no Apple Developer certificate), so Gatekeeper will refuse a plain double-click on first launch — same idea as Windows SmartScreen above. Right-click (or Control-click) the app in Finder, choose **Open**, then confirm in the dialog that appears; this is only needed the first time.
 
