@@ -1,4 +1,5 @@
 let scanResult = null;
+let scannedPath = "";
 let selectedKeys = new Set();
 let langDisplayToCode = {};
 let newLangOptions = [];
@@ -313,8 +314,16 @@ async function doScan() {
   }
 
   scanResult = res.result;
+  scannedPath = path;
   renderReviewScreen();
   showScreen("review");
+
+  const pending = await api().get_pending_sheet_sync(path);
+  if (pending.keys.length) {
+    document.getElementById("review-summary").insertAdjacentHTML("beforeend",
+      `<div class="section-title summary-warn">Not yet in the Google Sheet</div>` +
+      `<ul class="summary-warn"><li>${pending.keys.length} string${pending.keys.length === 1 ? "" : "s"} translated in an earlier run never got uploaded to the Sheet. Use <b>Push strings to Sheet…</b> below to upload them.</li></ul>`);
+  }
 }
 
 // --- Review screen ------------------------------------------------------
@@ -522,11 +531,27 @@ function renderResultsScreen(payload) {
     html += `<p><span class="count-ok">Synced</span> — tab "${escapeHtml(payload.sheet_tab_name || "")}"</p>`;
   } else if (payload.sheet_status === "error") {
     html += `<p class="error-text">Sheet sync failed: ${escapeHtml(payload.sheet_error || "unknown error")}</p>`;
+    html += `<p class="hint">Your translations are saved. These strings are remembered as not yet synced, so you can retry now or push them later.</p>`;
+    html += `<button id="retry-sheet-btn" class="btn btn-small">Retry Sheet sync</button> <span id="results-retry-status" class="status-text"></span>`;
   } else {
     html += `<p class="hint">Skipped (sync not enabled, or nothing new was written).</p>`;
   }
 
   el.innerHTML = html;
+
+  const retryBtn = document.getElementById("retry-sheet-btn");
+  if (retryBtn) {
+    retryBtn.addEventListener("click", async () => {
+      const pending = await api().get_pending_sheet_sync(scannedPath);
+      if (!pending.keys.length) {
+        setPushStatus("Nothing pending.", false);
+        return;
+      }
+      retryBtn.disabled = true;
+      setPushStatus("Retrying…", false);
+      api().sync_keys_to_sheet(scannedPath, currentProvider(), pending.keys);
+    });
+  }
 }
 
 function wireResultsScreen() {
@@ -535,7 +560,177 @@ function wireResultsScreen() {
     selectedKeys = new Set();
     showScreen("setup");
   });
+  document.getElementById("results-push-btn").addEventListener("click", () => openPushScreen("android", "results"));
 }
+
+// --- Push strings to Sheet ----------------------------------------------
+
+let pushItems = [];
+let pushSelected = new Set();
+let pushPendingKeys = new Set();
+let pushLangs = {};
+let pushSelectedLangs = new Set();
+
+function renderPushLangs() {
+  const el = document.getElementById("push-langs");
+  el.innerHTML = "";
+  Object.entries(pushLangs).sort((a, b) => a[1].localeCompare(b[1])).forEach(([code, name]) => {
+    const lbl = document.createElement("label");
+    lbl.className = "radio";
+    lbl.innerHTML = `<input type="checkbox" ${pushSelectedLangs.has(code) ? "checked" : ""} /> ${escapeHtml(name)}`;
+    lbl.querySelector("input").addEventListener("change", e => {
+      if (e.target.checked) pushSelectedLangs.add(code);
+      else pushSelectedLangs.delete(code);
+    });
+    el.appendChild(lbl);
+  });
+}
+
+function currentProvider() {
+  return document.querySelector('input[name="provider"]:checked').value;
+}
+
+function setPushStatus(msg, isErr) {
+  ["push-status", "results-retry-status", "history-status"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.toggle("error-text", !!isErr);
+  });
+}
+
+function updatePushCount() {
+  document.getElementById("push-selected-count").textContent = `${pushSelected.size} of ${pushItems.length} selected`;
+  document.getElementById("push-run-btn").disabled = pushSelected.size === 0;
+}
+
+function applyPushFilter() {
+  const q = document.getElementById("push-filter-input").value.trim().toLowerCase();
+  document.querySelectorAll("#push-tbody tr[data-key]").forEach(tr => {
+    const match = !q || tr.dataset.key.toLowerCase().includes(q) || tr.dataset.text.toLowerCase().includes(q);
+    tr.classList.toggle("hidden", !match);
+  });
+}
+
+function renderPushTable() {
+  const tbody = document.getElementById("push-tbody");
+  tbody.innerHTML = "";
+  pushItems.forEach(it => {
+    const tr = document.createElement("tr");
+    tr.dataset.key = it.key;
+    tr.dataset.text = it.text;
+    const badge = pushPendingKeys.has(it.key) ? ` <span class="badge">unsynced</span>` : "";
+    tr.innerHTML = `
+      <td class="col-check"><input type="checkbox" data-key="${escapeHtml(it.key)}" ${pushSelected.has(it.key) ? "checked" : ""} /></td>
+      <td class="key-cell">${escapeHtml(it.key)}${badge}</td>
+      <td>${escapeHtml(it.text)}</td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener("change", () => {
+      if (cb.checked) pushSelected.add(cb.dataset.key);
+      else pushSelected.delete(cb.dataset.key);
+      updatePushCount();
+    });
+  });
+  applyPushFilter();
+  updatePushCount();
+}
+
+let pushPlatform = "android";
+let pushPath = "";
+let pushReturn = "review";
+
+async function openPushScreen(platform, returnTo) {
+  pushPlatform = platform === "ios" ? "ios" : "android";
+  pushReturn = returnTo || "review";
+  pushPath = pushPlatform === "ios"
+    ? document.getElementById("ios-path-input").value.trim()
+    : scannedPath;
+  if (!pushPath) return;
+  setPushStatus("Loading…", false);
+  document.getElementById("push-filter-input").value = "";
+  showScreen("push");
+  let res, pendingKeys;
+  if (pushPlatform === "ios") {
+    res = await api().ios_list_catalog_keys(pushPath);
+    pendingKeys = res.pending || [];
+  } else {
+    let pending;
+    [res, pending] = await Promise.all([
+      api().list_english_keys(pushPath),
+      api().get_pending_sheet_sync(pushPath),
+    ]);
+    pendingKeys = pending.keys;
+  }
+  if (!res.ok) {
+    setPushStatus(res.error || "Couldn't read the strings file.", true);
+    return;
+  }
+  setPushStatus("", false);
+  pushItems = res.items;
+  const present = new Set(pushItems.map(i => i.key));
+  pushPendingKeys = new Set(pendingKeys.filter(k => present.has(k)));
+  pushSelected = new Set(pushPendingKeys);
+  pushLangs = res.languages || {};
+  pushSelectedLangs = new Set(Object.keys(pushLangs));
+  renderPushLangs();
+
+  const noteEl = document.getElementById("push-pending");
+  noteEl.classList.toggle("hidden", pushPendingKeys.size === 0);
+  noteEl.textContent = `${pushPendingKeys.size} string(s) from earlier runs were translated but never uploaded — pre-selected below.`;
+  document.getElementById("push-select-pending-btn").classList.toggle("hidden", pushPendingKeys.size === 0);
+  renderPushTable();
+}
+
+function wirePushScreen() {
+  document.getElementById("push-open-btn").addEventListener("click", () => openPushScreen("android", "review"));
+  document.getElementById("ios-push-open-btn").addEventListener("click", () => openPushScreen("ios", "ios"));
+  document.getElementById("push-back-btn").addEventListener("click", () => showScreen(pushReturn));
+  document.getElementById("push-filter-input").addEventListener("input", applyPushFilter);
+  document.getElementById("push-select-all-btn").addEventListener("click", () => {
+    document.querySelectorAll("#push-tbody tr[data-key]:not(.hidden)")
+      .forEach(tr => pushSelected.add(tr.dataset.key));
+    renderPushTable();
+  });
+  document.getElementById("push-select-none-btn").addEventListener("click", () => {
+    pushSelected.clear();
+    renderPushTable();
+  });
+  document.getElementById("push-select-pending-btn").addEventListener("click", () => {
+    pushSelected = new Set(pushPendingKeys);
+    renderPushTable();
+  });
+  document.getElementById("push-run-btn").addEventListener("click", () => {
+    if (pushSelectedLangs.size === 0) {
+      setPushStatus("Select at least one language.", true);
+      return;
+    }
+    document.getElementById("push-run-btn").disabled = true;
+    setPushStatus("Uploading…", false);
+    const keys = Array.from(pushSelected), langs = Array.from(pushSelectedLangs);
+    if (pushPlatform === "ios") api().ios_sync_keys_to_sheet(pushPath, currentProvider(), keys, langs);
+    else api().sync_keys_to_sheet(pushPath, currentProvider(), keys, langs);
+  });
+}
+
+window.onSheetPushDone = function (payload) {
+  if (document.getElementById("screen-history").classList.contains("active")) renderHistory();
+  setPushStatus(`Uploaded ${payload.count} string${payload.count === 1 ? "" : "s"} to tab "${payload.tab_name}".`, false);
+  pushSelected.forEach(k => pushPendingKeys.delete(k));
+  const retryBtn = document.getElementById("retry-sheet-btn");
+  if (retryBtn) retryBtn.classList.add("hidden");
+  if (document.getElementById("screen-push").classList.contains("active")) {
+    renderPushTable();
+  }
+};
+
+window.onSheetPushError = function (msg) {
+  setPushStatus("Upload failed: " + msg, true);
+  const retryBtn = document.getElementById("retry-sheet-btn");
+  if (retryBtn) retryBtn.disabled = false;
+  updatePushCount();
+};
 
 // --- Updates ------------------------------------------------------
 
@@ -615,6 +810,131 @@ window.onUpdateError = function (msg) {
 
 // --- Menu / About ------------------------------------------------------
 
+// --- History ----------------------------------------------------------------
+
+const HISTORY_STATUS = { running: "Running", completed: "Completed", failed: "Failed", interrupted: "Interrupted" };
+
+function openHistoryScreen() {
+  document.querySelector(".steps").classList.add("hidden");
+  document.querySelectorAll(".platform-btn").forEach(b => b.classList.remove("active"));
+  setPushStatus("", false);
+  showScreen("history");
+  renderHistory();
+}
+
+function historySheetCell(run) {
+  const n = (run.unsynced_keys || []).length;
+  if (n > 0) return `<span class="count-fail">${n} not in Sheet</span>`;
+  if ((run.written_keys || []).length === 0) return `<span class="hint">—</span>`;
+  const tab = run.sheet && run.sheet.tab ? ` — tab "${escapeHtml(run.sheet.tab)}"` : "";
+  return `<span class="count-ok">In Sheet</span>${tab}`;
+}
+
+function historyRunCell(run) {
+  if (run.platform === "ios") {
+    return `<span class="badge">iOS</span> <span class="key-cell">${escapeHtml(run.key || "")}</span>` +
+           `<div class="hint">${escapeHtml(run.english_text || "")}</div>`;
+  }
+  const done = (run.written_keys || []).length;
+  return `<span class="badge">Android</span> ${run.keys.length} selected, ${done} translated` +
+         `<div class="hint">${escapeHtml(run.path || "")}</div>`;
+}
+
+function historyStatusCell(run) {
+  const cls = run.status === "completed" ? "count-ok" : run.status === "running" ? "hint" : "count-fail";
+  let html = `<span class="${cls}">${HISTORY_STATUS[run.status] || run.status}</span>`;
+  const failLangs = Object.keys(run.failures || {});
+  if (failLangs.length) html += `<div class="hint">Still missing in ${failLangs.map(escapeHtml).join(", ")}</div>`;
+  if (run.still_missing && run.still_missing.length) html += `<div class="hint">Still missing: ${run.still_missing.map(escapeHtml).join(", ")}</div>`;
+  if (run.error) html += `<div class="error-text">${escapeHtml(run.error)}</div>`;
+  return html;
+}
+
+function runIsResumable(run) {
+  if (run.status === "interrupted" || run.status === "failed") return true;
+  return run.status === "completed" && Object.keys(run.failures || {}).length > 0;
+}
+
+async function renderHistory() {
+  const runs = await api().get_history();
+  const tbody = document.getElementById("history-tbody");
+  tbody.innerHTML = "";
+  if (runs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-dim); padding:20px;">No runs yet.</td></tr>`;
+    return;
+  }
+  runs.forEach(run => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(new Date(run.started * 1000).toLocaleString())}<div class="hint">${escapeHtml(run.provider || "")}</div></td>
+      <td>${historyRunCell(run)}</td>
+      <td>${historyStatusCell(run)}</td>
+      <td>${historySheetCell(run)}</td>
+      <td class="history-actions"></td>`;
+    const actions = tr.querySelector(".history-actions");
+    const addBtn = (label, fn) => {
+      const b = document.createElement("button");
+      b.className = "btn btn-small";
+      b.textContent = label;
+      b.addEventListener("click", fn);
+      actions.appendChild(b);
+    };
+    if (runIsResumable(run)) addBtn("Resume", () => resumeRun(run));
+    if ((run.unsynced_keys || []).length) {
+      addBtn("Retry Sheet sync", () => {
+        setPushStatus("Uploading…", false);
+        if (run.platform === "ios") api().ios_sync_keys_to_sheet(run.path, run.provider, run.unsynced_keys);
+        else api().sync_keys_to_sheet(run.path, run.provider, run.unsynced_keys);
+      });
+    }
+    addBtn("Delete", async () => { await api().delete_history_entry(run.id); renderHistory(); });
+    tbody.appendChild(tr);
+  });
+}
+
+function setProviderRadio(provider) {
+  const r = document.querySelector(`input[name="provider"][value="${provider}"]`);
+  if (r) r.checked = true;
+}
+
+async function resumeRun(run) {
+  setProviderRadio(run.provider);
+  if (run.platform === "ios") {
+    switchPlatform("ios");
+    document.getElementById("ios-path-input").value = run.path;
+    await doIosLoad();
+    document.getElementById("ios-text-input").value = run.english_text || "";
+    document.getElementById("ios-context-input").value = run.context || "";
+    document.getElementById("ios-key-input").value = run.key || "";
+    iosKeyManuallyEdited = true;
+    iosSelectedLangs = new Set(run.target_codes || []);
+    renderIosLangPicker(document.getElementById("ios-lang-filter-input").value);
+    document.getElementById("ios-add-status").textContent = "Restored from history — click Translate & Add to continue.";
+    return;
+  }
+  switchPlatform("android");
+  document.getElementById("path-input").value = run.path;
+  await doScan();
+  if (!scanResult) return;
+  const wanted = new Set(run.keys);
+  selectedKeys = new Set(scanResult.keys.map(k => k.key).filter(k => wanted.has(k)));
+  document.querySelectorAll('#review-tbody input[type="checkbox"]')
+    .forEach(cb => { cb.checked = selectedKeys.has(cb.dataset.key); });
+  updateSelectedCount();
+  if (selectedKeys.size === 0) {
+    alert("Nothing left to translate from that run — every string it selected is already translated. Use Retry Sheet sync in History if it never reached the Sheet.");
+  }
+}
+
+function wireHistoryScreen() {
+  document.getElementById("history-back-btn").addEventListener("click", () => switchPlatform(currentPlatform));
+  document.getElementById("history-clear-btn").addEventListener("click", async () => {
+    if (!confirm("Clear the whole run history? Strings already written to your files are not affected, but unsynced strings stay tracked for the Sheet.")) return;
+    await api().clear_history();
+    renderHistory();
+  });
+}
+
 const GITHUB_USERNAME = "adnaanaeem";
 let aboutLoaded = false;
 
@@ -634,6 +954,10 @@ function wireMenu() {
     document.querySelector(".steps").classList.add("hidden");
     document.querySelectorAll(".platform-btn").forEach(b => b.classList.remove("active"));
     showScreen("settings");
+  });
+  document.getElementById("menu-history").addEventListener("click", () => {
+    dropdown.classList.add("hidden");
+    openHistoryScreen();
   });
   document.getElementById("menu-check-update").addEventListener("click", () => {
     dropdown.classList.add("hidden");
@@ -901,7 +1225,7 @@ async function doIosUploadSheet() {
   const statusEl = document.getElementById("ios-upload-status");
   statusEl.textContent = "Uploading…";
   document.getElementById("ios-upload-sheet-btn").disabled = true;
-  await api().ios_upload_session_to_sheet(iosSession, provider);
+  await api().ios_upload_session_to_sheet(iosSession, provider, document.getElementById("ios-path-input").value.trim());
 }
 
 window.onIosSheetUploadDone = function (payload) {
@@ -1233,6 +1557,8 @@ function init() {
   wireSettingsScreen();
   wireReviewScreen();
   wireResultsScreen();
+  wirePushScreen();
+  wireHistoryScreen();
   wireUpdateBanner();
   wireMenu();
   wireAboutModal();

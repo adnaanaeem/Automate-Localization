@@ -559,7 +559,8 @@ class LocalizationEngine:
 
     def run(self, selected_keys, provider, client, on_progress: Callable[[str, int, int], None],
             batch_size=BATCH_SIZE, max_retries=MAX_RETRIES_PER_BATCH,
-            on_log: Optional[Callable[[str], None]] = None) -> RunResult:
+            on_log: Optional[Callable[[str], None]] = None,
+            on_written: Optional[Callable[[set], None]] = None) -> RunResult:
         """
         Translates only selected_keys, batch by batch, per language.
         on_progress(display_name, done, total) fires after every batch.
@@ -623,6 +624,8 @@ class LocalizationEngine:
                 written[display_name] = written.get(display_name, 0) + count
                 written_keys.update(lang_results.keys())
                 existing_by_lang[code].update(lang_results)
+                if on_written:
+                    on_written(set(lang_results.keys()))
 
         # Variant folders: raw English copy, no translation, no AI call.
         variant_written = {}
@@ -648,7 +651,7 @@ class LocalizationEngine:
             written_keys=written_keys,
         )
 
-    def build_sheet_rows(self, written_keys):
+    def build_sheet_rows(self, written_keys, lang_codes=None):
         """
         Builds {key: {'English': ..., display_name: value, ...}} for exactly
         the keys in written_keys -- the ones that got a new translation
@@ -665,14 +668,16 @@ class LocalizationEngine:
         eng_data = self._eng_data
         layout = self._layout
         existing_by_lang = self._existing_by_lang
-        lang_display_list = [info['display_name'] for info in layout['languages'].values()]
+        languages = {c: i for c, i in layout['languages'].items()
+                     if lang_codes is None or c in lang_codes}
+        lang_display_list = [info['display_name'] for info in languages.values()]
 
         master_sheet = {}
         for key in written_keys:
             if key not in eng_data:
                 continue
             row = {'English': eng_data[key]['text']}
-            for code, info in layout['languages'].items():
+            for code, info in languages.items():
                 existing = existing_by_lang.get(code)
                 if existing and existing.get(key):
                     row[info['display_name']] = existing[key]

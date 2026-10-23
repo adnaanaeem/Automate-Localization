@@ -80,6 +80,50 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2)
 
 
+# --- Pending Sheet syncs ----------------------------------------------------
+# Keys that were translated and written to disk but not yet uploaded to the
+# Sheet (sync failed / app closed mid-way). Kept in its own file, keyed by the
+# res/ path, so a later session can still push them.
+
+def _pending_sync_path():
+    return os.path.join(get_config_dir(), "pending_sheet_sync.json")
+
+
+def load_pending_syncs():
+    try:
+        with open(_pending_sync_path(), "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_pending_syncs(data):
+    with open(_pending_sync_path(), "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def add_pending_sync(res_path, keys):
+    data = load_pending_syncs()
+    merged = set(data.get(res_path, [])) | set(keys)
+    data[res_path] = sorted(merged)
+    _save_pending_syncs(data)
+
+
+def remove_pending_sync(res_path, keys):
+    data = load_pending_syncs()
+    remaining = set(data.get(res_path, [])) - set(keys)
+    if remaining:
+        data[res_path] = sorted(remaining)
+    else:
+        data.pop(res_path, None)
+    _save_pending_syncs(data)
+
+
+def get_pending_sync_keys(res_path):
+    return list(load_pending_syncs().get(res_path, []))
+
+
 def add_recent_path(cfg, path, key="recent_paths"):
     paths = cfg.get(key, [])
     paths = [p for p in paths if p != path]

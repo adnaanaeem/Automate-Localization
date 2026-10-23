@@ -262,3 +262,6 @@ textarea:focus { outline: none; border-color: var(--accent); }
 #ios-session-table .badge { margin-right: 3px; }
 .ios-lang-ok { color: var(--ok); }
 .ios-lang-warn { color: var(--warn); }
+
+.history-actions { white-space: nowrap; text-align: right; }
+.history-actions .btn { margin: 2px 0 2px 4px; }

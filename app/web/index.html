@@ -23,6 +23,7 @@
     <button id="menu-btn" class="btn btn-small">☰ Menu</button>
     <div id="menu-dropdown" class="menu-dropdown hidden">
       <button id="menu-settings" class="menu-item">⚙️ Settings</button>
+      <button id="menu-history" class="menu-item">🕘 History</button>
       <button id="menu-check-update" class="menu-item">🔄 Check for updates</button>
       <button id="menu-about" class="menu-item">ℹ️ About</button>
     </div>
@@ -126,7 +127,39 @@
 
     <div class="actions">
       <button id="back-to-setup-btn" class="btn">Back</button>
+      <button id="push-open-btn" class="btn" title="Upload already-translated strings to the Google Sheet">Push strings to Sheet…</button>
       <button id="run-btn" class="btn btn-primary">Translate selected</button>
+    </div>
+  </section>
+
+  <!-- PUSH TO SHEET SCREEN -->
+  <section id="screen-push" class="screen">
+    <div class="card">
+      <h2>Push strings to Sheet</h2>
+      <p class="hint">Uploads the selected strings (with every language's current value) to a new tab in your Google Sheet. Newest strings are listed first — use this if a Sheet sync failed or was missed.</p>
+      <div id="push-pending" class="hint hidden"></div>
+      <label>Languages to include <span class="hint-inline">(columns in the Sheet)</span></label>
+      <div id="push-langs" class="lang-selected-list"></div>
+      <input id="push-filter-input" type="text" placeholder="Filter by key or English text…" />
+      <div class="review-toolbar">
+        <div>
+          <button id="push-select-all-btn" class="btn btn-small">Select all shown</button>
+          <button id="push-select-pending-btn" class="btn btn-small hidden">Select unsynced</button>
+          <button id="push-select-none-btn" class="btn btn-small">Select none</button>
+        </div>
+        <div id="push-selected-count" class="hint"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th class="col-check"></th><th>Key</th><th>English text</th></tr></thead>
+          <tbody id="push-tbody"></tbody>
+        </table>
+      </div>
+      <p id="push-status" class="status-text"></p>
+    </div>
+    <div class="actions">
+      <button id="push-back-btn" class="btn">Back</button>
+      <button id="push-run-btn" class="btn btn-primary" disabled>Push selected to Sheet</button>
     </div>
   </section>
 
@@ -149,7 +182,27 @@
       <div id="results-summary"></div>
     </div>
     <div class="actions">
+      <button id="results-push-btn" class="btn">Push strings to Sheet…</button>
       <button id="new-run-btn" class="btn btn-primary">Start another run</button>
+    </div>
+  </section>
+
+  <!-- HISTORY SCREEN -->
+  <section id="screen-history" class="screen">
+    <div class="card">
+      <h2>Translation &amp; sync history</h2>
+      <p class="hint">Every run is recorded here. If a run was interrupted or failed, <b>Resume</b> picks up what's left; if strings never reached the Google Sheet, <b>Retry Sheet sync</b> uploads them.</p>
+      <p id="history-status" class="status-text"></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>When</th><th>Run</th><th>Status</th><th>Google Sheet</th><th></th></tr></thead>
+          <tbody id="history-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="history-back-btn" class="btn">Back</button>
+      <button id="history-clear-btn" class="btn">Clear history</button>
     </div>
   </section>
 
@@ -268,6 +321,7 @@
         <p id="ios-sheet-name-hint" class="hint"></p>
         <div class="actions">
           <button id="ios-upload-sheet-btn" class="btn" disabled>Upload session to Sheet</button>
+          <button id="ios-push-open-btn" class="btn" title="Pick any strings/languages from the catalog to upload">Push strings to Sheet…</button>
           <span id="ios-upload-status" class="status-text"></span>
         </div>
       </div>

@@ -22,7 +22,8 @@ else:
     sys.path.insert(0, APP_DIR)
 
 import config
-from engine import LocalizationEngine, sync_to_google_sheet, get_all_language_options
+import history
+from engine import LocalizationEngine, sync_to_google_sheet, get_all_language_options, get_eng_strings_with_context, discover_res_layout
 import ios_engine
 import providers
 import sheet_import
@@ -56,6 +57,10 @@ class Api:
         self._base_res_path = None
         self._event_queue = []
         self._event_lock = threading.Lock()
+        self._strings_xml_path = None
+        # A fresh process has no live runs, so anything still marked
+        # 'running' in the history is a run that got cut off.
+        history.mark_stale_running()
 
     def set_window(self, window):
         self._window = window
@@ -188,6 +193,7 @@ class Api:
 
             self._engine = engine
             self._base_res_path = base_res_path
+            self._strings_xml_path = strings_xml_path
 
             cfg = config.load_config()
             config.add_recent_path(cfg, strings_xml_path)
@@ -224,9 +230,15 @@ class Api:
     def run_translation(self, selected_keys, provider, sync_sheet):
         if not self._engine:
             return {"ok": False, "error": "Run scan() first."}
+        run_id = history.start_run({
+            "platform": "android", "path": self._strings_xml_path, "provider": provider,
+            "keys": list(selected_keys), "written_keys": [], "written": {}, "failures": {},
+            "variant_written": {}, "sheet_sync": bool(sync_sheet),
+            "sheet": {"status": "pending", "tab": None, "error": None}, "error": None,
+        })
         threading.Thread(
             target=self._run_translation_thread,
-            args=(list(selected_keys), provider, bool(sync_sheet)),
+            args=(run_id, list(selected_keys), provider, bool(sync_sheet)),
             daemon=True,
         ).start()
         return {"ok": True}
@@ -274,11 +286,12 @@ class Api:
             self._event_queue = []
         return events
 
-    def _run_translation_thread(self, selected_keys, provider, sync_sheet):
+    def _run_translation_thread(self, run_id, selected_keys, provider, sync_sheet):
         try:
             api_key = config.get_api_key(provider)
             client, model_name = providers.get_client(provider, api_key)
         except Exception as e:
+            history.finish_run(run_id, "failed", error=str(e))
             self._emit("onTranslationError", str(e))
             return
 
@@ -292,13 +305,25 @@ class Api:
         def on_log(msg):
             self._emit("onTranslationLog", msg)
 
+        def on_written(keys):
+            # Called after each language's file is written. Recording here (not
+            # just at the end) means an interrupted run still leaves a record
+            # of what already landed on disk and still needs a Sheet row.
+            def _m(run):
+                run["written_keys"] = sorted(set(run["written_keys"]) | set(keys))
+            history.update_run(run_id, _m)
+            if sync_sheet:
+                config.add_pending_sync(self._base_res_path, keys)
+
         try:
             result = self._engine.run(
                 set(selected_keys), provider, client,
                 on_progress=on_progress, on_log=on_log,
                 batch_size=batch_size, max_retries=max_retries,
+                on_written=on_written,
             )
         except Exception as e:
+            history.finish_run(run_id, "failed", error=str(e))
             self._emit("onTranslationError", str(e))
             return
 
@@ -307,6 +332,12 @@ class Api:
         sheet_tab_name = None
 
         if sync_sheet and result.written_keys:
+            # Persist before attempting the upload: if it fails (or the app
+            # closes), these keys are no longer "missing" on the next scan, so
+            # without this record they could never be pushed to the Sheet.
+            # Also picks up keys left over from earlier failed runs.
+            config.add_pending_sync(self._base_res_path, result.written_keys)
+            pending_keys = set(config.get_pending_sync_keys(self._base_res_path))
             sheet_id = cfg.get("google_sheet_id", "")
             sa_path = cfg.get("service_account_path", "")
             if not sheet_id or not sa_path:
@@ -314,15 +345,24 @@ class Api:
                 sheet_error = "Sheet sync is on but Sheet ID or service account file isn't configured."
             else:
                 try:
-                    master_sheet, lang_display_list = self._engine.build_sheet_rows(result.written_keys)
+                    master_sheet, lang_display_list = self._engine.build_sheet_rows(pending_keys)
                     sheet_tab_name = sync_to_google_sheet(
                         sheet_id, sa_path, provider, master_sheet, lang_display_list
                     )
+                    config.remove_pending_sync(self._base_res_path, pending_keys)
                     sheet_status = "synced"
                 except Exception as e:
                     sheet_status = "error"
                     sheet_error = str(e) or f"{type(e).__name__} (no message -- see log for details)"
                     on_log(f"Sheet sync failed: {type(e).__name__}: {e}\n{traceback.format_exc()}")
+
+        history.finish_run(
+            run_id, "completed",
+            written=result.written, failures=result.failures,
+            variant_written=result.variant_written,
+            written_keys=sorted(result.written_keys),
+            sheet={"status": sheet_status, "tab": sheet_tab_name, "error": sheet_error},
+        )
 
         payload = {
             "written": result.written,
@@ -333,6 +373,83 @@ class Api:
             "sheet_tab_name": sheet_tab_name,
         }
         self._emit("onTranslationDone", payload)
+
+    # --- history -----------------------------------------------------------------
+
+    def get_history(self):
+        """Newest first. unsynced_keys is computed live from the pending-sync
+        store, so a row reflects uploads made after the run finished."""
+        runs = history.list_runs()
+        pending_by_path = {}
+        for run in runs:
+            path = run.get("path")
+            # Android pending keys are stored per res/ folder, iOS per catalog file.
+            store_key = os.path.dirname(os.path.dirname(path)) if run.get("platform") == "android" else path
+            if store_key not in pending_by_path:
+                pending_by_path[store_key] = set(config.get_pending_sync_keys(store_key))
+            run["unsynced_keys"] = sorted(set(run.get("written_keys", [])) & pending_by_path[store_key])
+        return runs
+
+    def delete_history_entry(self, run_id):
+        history.delete_run(run_id)
+        return {"ok": True}
+
+    def clear_history(self):
+        history.clear_all()
+        return {"ok": True}
+
+    # --- Android: push strings to the Sheet outside a normal run ---------------
+
+    def get_pending_sheet_sync(self, strings_xml_path):
+        res_path = os.path.dirname(os.path.dirname(strings_xml_path))
+        return {"keys": config.get_pending_sync_keys(res_path)}
+
+    def list_english_keys(self, strings_xml_path):
+        """All translatable English keys, newest (last in file) first, for the
+        manual 'Push strings to Sheet' picker."""
+        try:
+            res_path = os.path.dirname(os.path.dirname(strings_xml_path))
+            eng = get_eng_strings_with_context(res_path)
+            items = [{"key": k, "text": v["text"]} for k, v in eng.items()]
+            items.reverse()
+            layout = discover_res_layout(res_path)
+            languages = {c: i["display_name"] for c, i in layout["languages"].items()}
+            return {"ok": True, "items": items, "languages": languages}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def sync_keys_to_sheet(self, strings_xml_path, provider, keys, lang_codes=None):
+        threading.Thread(
+            target=self._sync_keys_to_sheet_thread,
+            args=(strings_xml_path, provider, list(keys),
+                  None if lang_codes is None else set(lang_codes)),
+            daemon=True,
+        ).start()
+        return {"ok": True}
+
+    def _sync_keys_to_sheet_thread(self, strings_xml_path, provider, keys, lang_codes=None):
+        cfg = config.load_config()
+        sheet_id = cfg.get("google_sheet_id", "")
+        sa_path = cfg.get("service_account_path", "")
+        if not sheet_id or not sa_path:
+            self._emit("onSheetPushError", "Sheet ID or service account file isn't configured (Settings screen).")
+            return
+        try:
+            res_path = os.path.dirname(os.path.dirname(strings_xml_path))
+            # Fresh scan so rows reflect what's on disk now, independent of
+            # whatever the last in-memory run/scan held.
+            engine = LocalizationEngine(res_path)
+            engine.scan()
+            master_sheet, lang_display_list = engine.build_sheet_rows(set(keys), lang_codes)
+            if not master_sheet:
+                self._emit("onSheetPushError", "None of the selected keys exist in the English strings.xml.")
+                return
+            tab_name = sync_to_google_sheet(sheet_id, sa_path, provider, master_sheet, lang_display_list)
+            config.remove_pending_sync(res_path, keys)
+        except Exception as e:
+            self._emit("onSheetPushError", str(e) or f"{type(e).__name__} (no message -- see log for details)")
+            return
+        self._emit("onSheetPushDone", {"tab_name": tab_name, "count": len(master_sheet)})
 
     # --- iOS -------------------------------------------------------------------
     # Fundamentally different shape from the Android flow above: no scan/diff
@@ -372,24 +489,33 @@ class Api:
         return {"ok": True, "existing_key_count": len(catalog.get("strings", {}))}
 
     def ios_translate_and_add(self, catalog_path, key, english_text, context, target_codes, provider):
+        run_id = history.start_run({
+            "platform": "ios", "path": catalog_path, "provider": provider, "key": key,
+            "english_text": english_text, "context": context, "target_codes": list(target_codes),
+            "keys": [key], "written_keys": [], "still_missing": [], "error": None,
+        })
         threading.Thread(
             target=self._ios_translate_and_add_thread,
-            args=(catalog_path, key, english_text, context, list(target_codes), provider),
+            args=(run_id, catalog_path, key, english_text, context, list(target_codes), provider),
             daemon=True,
         ).start()
         return {"ok": True}
 
-    def _ios_translate_and_add_thread(self, catalog_path, key, english_text, context, target_codes, provider):
+    def _ios_translate_and_add_thread(self, run_id, catalog_path, key, english_text, context, target_codes, provider):
         try:
             api_key = config.get_api_key(provider)
             client, model_name = providers.get_client(provider, api_key)
         except Exception as e:
-            self._emit("onIosAddError", str(e))
+            msg = str(e)
+            history.finish_run(run_id, "failed", error=msg)
+            self._emit("onIosAddError", msg)
             return
 
         catalog = ios_engine.load_catalog(catalog_path)
         if catalog is None:
-            self._emit("onIosAddError", f"{catalog_path} exists but could not be parsed as a valid .xcstrings file -- refusing to write to it.")
+            msg = f"{catalog_path} exists but could not be parsed as a valid .xcstrings file -- refusing to write to it."
+            history.finish_run(run_id, "failed", error=msg)
+            self._emit("onIosAddError", msg)
             return
 
         target_langs = {c: n for c, n in ios_engine.IOS_LANG_DISPLAY_NAMES.items() if c in target_codes}
@@ -410,16 +536,27 @@ class Api:
                 max_retries=max_retries, batch_size=batch_size, on_retry=on_retry,
             )
         except Exception as e:
-            self._emit("onIosAddError", str(e))
+            msg = str(e)
+            history.finish_run(run_id, "failed", error=msg)
+            self._emit("onIosAddError", msg)
             return
 
         merge_result = ios_engine.add_string_to_catalog(catalog, key, english_text, translations, context=context)
         try:
             ios_engine.save_catalog(catalog_path, catalog)
         except Exception as e:
-            self._emit("onIosAddError", f"Translated successfully but failed to write {catalog_path}: {e}")
+            msg = f"Translated successfully but failed to write {catalog_path}: {e}"
+            history.finish_run(run_id, "failed", error=msg)
+            self._emit("onIosAddError", msg)
             return
 
+        # Remember it as not-yet-in-the-Sheet until an upload succeeds, so it
+        # survives the session list being lost (app closed, upload failed).
+        if merge_result["added"]:
+            config.add_pending_sync(catalog_path, [key])
+
+        history.finish_run(run_id, "completed", written_keys=[key] if merge_result["added"] else [],
+                           still_missing=list(still_missing))
         self._emit("onIosAddDone", {
             "key": key,
             "english_text": english_text,
@@ -429,15 +566,56 @@ class Api:
             "still_missing": still_missing,
         })
 
-    def ios_upload_session_to_sheet(self, session_entries, provider):
+    def ios_list_catalog_keys(self, catalog_path):
+        catalog = ios_engine.load_catalog(catalog_path)
+        if catalog is None:
+            return {"ok": False, "error": f"{catalog_path} could not be parsed as a valid .xcstrings file."}
+        pending = config.get_pending_sync_keys(catalog_path)
+        items, languages = ios_engine.list_catalog_entries(catalog, first_keys=pending)
+        present = {i["key"] for i in items}
+        return {"ok": True, "items": items, "languages": languages,
+                "pending": [k for k in pending if k in present]}
+
+    def ios_sync_keys_to_sheet(self, catalog_path, provider, keys, lang_codes=None):
         threading.Thread(
-            target=self._ios_upload_session_thread,
-            args=(list(session_entries), provider),
+            target=self._ios_sync_keys_thread,
+            args=(catalog_path, provider, list(keys), None if lang_codes is None else set(lang_codes)),
             daemon=True,
         ).start()
         return {"ok": True}
 
-    def _ios_upload_session_thread(self, session_entries, provider):
+    def _ios_sync_keys_thread(self, catalog_path, provider, keys, lang_codes):
+        cfg = config.load_config()
+        sheet_id = cfg.get("google_sheet_id", "")
+        sa_path = cfg.get("service_account_path", "")
+        if not sheet_id or not sa_path:
+            self._emit("onSheetPushError", "Sheet ID or service account file isn't configured (Settings screen).")
+            return
+        catalog = ios_engine.load_catalog(catalog_path)
+        if catalog is None:
+            self._emit("onSheetPushError", f"{catalog_path} could not be parsed as a valid .xcstrings file.")
+            return
+        try:
+            master_sheet, lang_display_list = ios_engine.build_sheet_rows_from_catalog(catalog, keys, lang_codes)
+            if not master_sheet:
+                self._emit("onSheetPushError", "None of the selected keys exist in this catalog.")
+                return
+            tab_name = ios_engine.sync_ios_to_google_sheet(sheet_id, sa_path, provider, master_sheet, lang_display_list)
+            config.remove_pending_sync(catalog_path, keys)
+        except Exception as e:
+            self._emit("onSheetPushError", str(e) or f"{type(e).__name__} (no message -- see log for details)")
+            return
+        self._emit("onSheetPushDone", {"tab_name": tab_name, "count": len(master_sheet)})
+
+    def ios_upload_session_to_sheet(self, session_entries, provider, catalog_path=None):
+        threading.Thread(
+            target=self._ios_upload_session_thread,
+            args=(list(session_entries), provider, catalog_path),
+            daemon=True,
+        ).start()
+        return {"ok": True}
+
+    def _ios_upload_session_thread(self, session_entries, provider, catalog_path=None):
         cfg = config.load_config()
         sheet_id = cfg.get("google_sheet_id", "")
         sa_path = cfg.get("service_account_path", "")
@@ -455,6 +633,8 @@ class Api:
         except Exception as e:
             self._emit("onIosSheetUploadError", str(e) or f"{type(e).__name__} (no message -- see log for details)")
             return
+        if catalog_path:
+            config.remove_pending_sync(catalog_path, [item["key"] for item in session_entries])
         self._emit("onIosSheetUploadDone", {"tab_name": tab_name, "count": len(session_entries)})
 
     # --- Import from Sheet ------------------------------------------------

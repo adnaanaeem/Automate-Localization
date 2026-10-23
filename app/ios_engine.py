@@ -323,6 +323,50 @@ def build_sheet_rows_for_session(session_entries, lang_display_names):
     return master_sheet
 
 
+def _catalog_english(key, entry):
+    en = entry.get("localizations", {}).get("en", {}).get("stringUnit", {}).get("value")
+    return en if en else key
+
+
+def list_catalog_entries(catalog, first_keys=()):
+    """
+    Returns ([{'key', 'text'}], {code: display_name}) for the catalog's
+    strings -- keys in first_keys (e.g. not-yet-synced ones) first, the rest
+    alphabetical (the file itself is key-sorted, so it has no 'newest').
+    Languages are those that appear on at least one entry, minus English.
+    """
+    strings = catalog.get("strings", {})
+    first = [k for k in first_keys if k in strings]
+    rest = sorted(k for k in strings if k not in set(first))
+    items = [{"key": k, "text": _catalog_english(k, strings[k])} for k in first + rest]
+    codes = {c for e in strings.values() for c in e.get("localizations", {}) if c != "en"}
+    languages = {c: IOS_LANG_DISPLAY_NAMES.get(c, c) for c in codes}
+    return items, languages
+
+
+def build_sheet_rows_from_catalog(catalog, keys, lang_codes=None):
+    """Same row shape as build_sheet_rows_for_session, but read from the
+    catalog on disk, restricted to keys and (optionally) lang_codes. Returns
+    (master_sheet, lang_display_list)."""
+    strings = catalog.get("strings", {})
+    _, languages = list_catalog_entries(catalog)
+    if lang_codes is not None:
+        languages = {c: n for c, n in languages.items() if c in lang_codes}
+    master_sheet = {}
+    for key in keys:
+        entry = strings.get(key)
+        if entry is None:
+            continue
+        locs = entry.get("localizations", {})
+        row = {'English': _catalog_english(key, entry)}
+        for code, name in languages.items():
+            value = locs.get(code, {}).get("stringUnit", {}).get("value")
+            if value:
+                row[name] = value
+        master_sheet[key] = row
+    return master_sheet, list(languages.values())
+
+
 def _client_email(service_account_path):
     """Best-effort read of just the client_email field, for a clearer
     permission-error message below -- never raises, "" on any failure."""
